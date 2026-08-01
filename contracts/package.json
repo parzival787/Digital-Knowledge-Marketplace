@@ -7,12 +7,24 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "type": "commonjs",
+  "type": "module",
   "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox": "^7.0.0",
-    "hardhat": "^3.10.0"
+    "@nomicfoundation/hardhat-ethers": "^4.0.15",
+    "@nomicfoundation/hardhat-mocha": "^3.0.21",
+    "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.7",
+    "@nomicfoundation/hardhat-verify": "^3.0.21",
+    "@types/chai": "^5.2.3",
+    "@types/mocha": "^10.0.10",
+    "chai": "^6.2.2",
+    "hardhat": "^3.10.0",
+    "mocha": "^11.7.6",
+    "typescript": "^7.0.2"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "^5.6.1"
+    "@openzeppelin/contracts": "^4.9.6",
+    "dotenv": "^17.4.2"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
   }
 }
