@@ -11,6 +11,7 @@ describe("RoyaltySplitter", function () {
     let professor: any;
     let university: any;
     let buyer: any;
+    let marketplace: any;
 
     let usdc: any;
     let royaltySplitter: any;
@@ -25,7 +26,8 @@ describe("RoyaltySplitter", function () {
             seller,
             professor,
             university,
-            buyer
+            buyer,
+            marketplace
         ] = await ethers.getSigners();
 
         //----------------------------------------------------------
@@ -62,6 +64,17 @@ describe("RoyaltySplitter", function () {
             );
 
         await royaltySplitter.waitForDeployment();
+
+        //----------------------------------------------------------
+        // Authorize the marketplace signer as the only caller
+        // allowed to invoke distributeRoyalty. In production this
+        // is Marketplace.sol's deployed address; here a plain
+        // signer stands in for it.
+        //----------------------------------------------------------
+
+        await royaltySplitter.updateMarketplace(
+            marketplace.address
+        );
 
         //----------------------------------------------------------
         // Mint Mock USDC
@@ -109,7 +122,7 @@ describe("RoyaltySplitter", function () {
     it("calculates royalty pool correctly", async function () {
 
         const amount =
-            await royaltySplitter.calculateSellerAmount(
+            await royaltySplitter.calculateRoyaltyPool(
                 100_000_000
             );
 
@@ -231,6 +244,61 @@ describe("RoyaltySplitter", function () {
         );
     });
 
+    it("allows owner to update the marketplace address", async function () {
+
+        await royaltySplitter.updateMarketplace(
+            buyer.address
+        );
+
+        expect(
+            await royaltySplitter.marketplace()
+        ).to.equal(
+            buyer.address
+        );
+    });
+
+    it("prevents non-owner from updating the marketplace address", async function () {
+
+        await expect(
+            royaltySplitter
+                .connect(buyer)
+                .updateMarketplace(
+                    buyer.address
+                )
+        ).to.be.revertedWith(
+    "Ownable: caller is not the owner"
+);
+    });
+
+    it("rejects zero marketplace address", async function () {
+
+        await expect(
+            royaltySplitter.updateMarketplace(
+                ethers.ZeroAddress
+            )
+        ).to.be.revertedWithCustomError(
+    royaltySplitter,
+    "InvalidMarketplace"
+);
+    });
+
+    it("emits MarketplaceUpdated event", async function () {
+
+        await expect(
+            royaltySplitter.updateMarketplace(
+                buyer.address
+            )
+        )
+        .to.emit(
+            royaltySplitter,
+            "MarketplaceUpdated"
+        )
+        .withArgs(
+            marketplace.address,
+            buyer.address
+        );
+    });
+
         /*//////////////////////////////////////////////////////////////
                     ROYALTY DISTRIBUTION TESTS
     //////////////////////////////////////////////////////////////*/
@@ -249,23 +317,22 @@ describe("RoyaltySplitter", function () {
 
         const recipients = [
             {
-                wallet: seller.address,
-                shareBps: 8000
-            },
-            {
                 wallet: professor.address,
                 shareBps: 1000
             },
             {
                 wallet: university.address,
-                shareBps: 1000
+                shareBps: 500
             }
         ];
 
-        await royaltySplitter.distributeRoyalty(
-            recipients,
-            totalAmount
-        );
+        await royaltySplitter
+            .connect(marketplace)
+            .distributeRoyalty(
+                seller.address,
+                recipients,
+                totalAmount
+            );
 
         expect(
             await usdc.balanceOf(
@@ -273,14 +340,6 @@ describe("RoyaltySplitter", function () {
             )
         ).to.equal(
             5_000_000
-        );
-
-        expect(
-            await usdc.balanceOf(
-                seller.address
-            )
-        ).to.equal(
-            76_000_000
         );
 
         expect(
@@ -296,47 +355,167 @@ describe("RoyaltySplitter", function () {
                 university.address
             )
         ).to.equal(
-            9_500_000
+            4_750_000
         );
+
+        expect(
+            await usdc.balanceOf(
+                seller.address
+            )
+        ).to.equal(
+            80_750_000
+        );
+    });
+
+    it("emits SellerPaid event", async function () {
+
+        const totalAmount = 100_000_000;
+
+        await usdc
+            .connect(buyer)
+            .transfer(
+                await royaltySplitter.getAddress(),
+                totalAmount
+            );
+
+        const recipients = [
+            {
+                wallet: professor.address,
+                shareBps: 1000
+            }
+        ];
+
+        await expect(
+            royaltySplitter
+                .connect(marketplace)
+                .distributeRoyalty(
+                    seller.address,
+                    recipients,
+                    totalAmount
+                )
+        )
+        .to.emit(
+            royaltySplitter,
+            "SellerPaid"
+        )
+        .withArgs(
+            seller.address,
+            85_500_000
+        );
+    });
+
+    it("rejects calls from anyone other than the marketplace", async function () {
+
+        const recipients = [
+            {
+                wallet: professor.address,
+                shareBps: 1000
+            }
+        ];
+
+        await expect(
+            royaltySplitter
+                .connect(buyer)
+                .distributeRoyalty(
+                    seller.address,
+                    recipients,
+                    100_000_000
+                )
+        ).to.be.revertedWithCustomError(
+    royaltySplitter,
+    "NotMarketplace"
+);
+    });
+
+    it("rejects zero seller address", async function () {
+
+        const recipients = [
+            {
+                wallet: professor.address,
+                shareBps: 1000
+            }
+        ];
+
+        await expect(
+            royaltySplitter
+                .connect(marketplace)
+                .distributeRoyalty(
+                    ethers.ZeroAddress,
+                    recipients,
+                    100_000_000
+                )
+        ).to.be.revertedWithCustomError(
+    royaltySplitter,
+    "InvalidSeller"
+);
     });
 
     it("rejects zero amount", async function () {
 
         const recipients = [
             {
-                wallet: seller.address,
-                shareBps: 10000
+                wallet: professor.address,
+                shareBps: 1000
             }
         ];
 
         await expect(
-            royaltySplitter.distributeRoyalty(
-                recipients,
-                0
-            )
+            royaltySplitter
+                .connect(marketplace)
+                .distributeRoyalty(
+                    seller.address,
+                    recipients,
+                    0
+                )
         ).to.be.revertedWithCustomError(
     royaltySplitter,
     "InvalidAmount"
 );
     });
 
-    it("rejects invalid total shares", async function () {
+    it("rejects royalty shares above the maximum", async function () {
 
         const recipients = [
             {
-                wallet: seller.address,
+                wallet: professor.address,
                 shareBps: 9000
             }
         ];
 
         await expect(
-            royaltySplitter.distributeRoyalty(
-                recipients,
-                100_000_000
-            )
+            royaltySplitter
+                .connect(marketplace)
+                .distributeRoyalty(
+                    seller.address,
+                    recipients,
+                    100_000_000
+                )
         ).to.be.revertedWithCustomError(
     royaltySplitter,
-    "InvalidTotalShares"
+    "RoyaltyExceedsMaximum"
+);
+    });
+
+    it("rejects a recipient that is also the seller", async function () {
+
+        const recipients = [
+            {
+                wallet: seller.address,
+                shareBps: 1000
+            }
+        ];
+
+        await expect(
+            royaltySplitter
+                .connect(marketplace)
+                .distributeRoyalty(
+                    seller.address,
+                    recipients,
+                    100_000_000
+                )
+        ).to.be.revertedWithCustomError(
+    royaltySplitter,
+    "SellerCannotBeRecipient"
 );
     });
 
@@ -344,20 +523,23 @@ describe("RoyaltySplitter", function () {
 
         const recipients = [
             {
-                wallet: seller.address,
-                shareBps: 5000
+                wallet: professor.address,
+                shareBps: 500
             },
             {
-                wallet: seller.address,
-                shareBps: 5000
+                wallet: professor.address,
+                shareBps: 500
             }
         ];
 
         await expect(
-            royaltySplitter.distributeRoyalty(
-                recipients,
-                100_000_000
-            )
+            royaltySplitter
+                .connect(marketplace)
+                .distributeRoyalty(
+                    seller.address,
+                    recipients,
+                    100_000_000
+                )
         ).to.be.revertedWithCustomError(
     royaltySplitter,
     "DuplicateRecipient"
@@ -369,18 +551,45 @@ describe("RoyaltySplitter", function () {
         const recipients = [
             {
                 wallet: ethers.ZeroAddress,
-                shareBps: 10000
+                shareBps: 1000
             }
         ];
 
         await expect(
-            royaltySplitter.distributeRoyalty(
-                recipients,
-                100_000_000
-            )
+            royaltySplitter
+                .connect(marketplace)
+                .distributeRoyalty(
+                    seller.address,
+                    recipients,
+                    100_000_000
+                )
         ).to.be.revertedWithCustomError(
     royaltySplitter,
     "InvalidRecipient"
+);
+    });
+
+    it("rejects too many recipients", async function () {
+
+        const recipients = Array.from(
+            { length: 11 },
+            () => ({
+                wallet: ethers.Wallet.createRandom().address,
+                shareBps: 100
+            })
+        );
+
+        await expect(
+            royaltySplitter
+                .connect(marketplace)
+                .distributeRoyalty(
+                    seller.address,
+                    recipients,
+                    100_000_000
+                )
+        ).to.be.revertedWithCustomError(
+    royaltySplitter,
+    "TooManyRecipients"
 );
     });
 

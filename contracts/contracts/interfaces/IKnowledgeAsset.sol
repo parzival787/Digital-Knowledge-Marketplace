@@ -13,11 +13,11 @@ interface IKnowledgeAsset {
         string ipfsCID;
         string metadataCID;
         uint256 priceUSDC;
+        address creator;
         License license;
-        address seller;
-        uint256 qualityScore;
-        uint256 mintedAt;
+        uint8 qualityScore;
         bool active;
+        uint40 mintedAt;
     }
 
     function mint(
@@ -35,6 +35,15 @@ interface IKnowledgeAsset {
     function ownerOf(
         uint256 tokenId
     ) external view returns (address);
+
+    function getApproved(
+    uint256 tokenId
+    ) external view returns (address);
+
+   function isApprovedForAll(
+    address owner,
+    address operator
+    ) external view returns (bool);
 
     function safeTransferFrom(
         address from,
@@ -55,4 +64,5 @@ interface IKnowledgeAsset {
         external
         view
         returns (uint256);
+    
 }

@@ -32,7 +32,7 @@ describe("KnowledgeAsset", function () {
 
     expect(asset.ipfsCID).to.equal("QmBLAKE3CID_Test");
     expect(asset.priceUSDC).to.equal(5_000_000n);
-    expect(asset.seller).to.equal(await seller.getAddress());
+    expect(asset.creator).to.equal(await seller.getAddress());
     expect(asset.qualityScore).to.equal(85n);
     expect(asset.active).to.equal(true);
   });
@@ -80,7 +80,25 @@ describe("KnowledgeAsset", function () {
         0,
         80
       )
-    ).to.be.revertedWith("IPFS CID cannot be empty");
+    ).to.be.revertedWithCustomError(
+      contract,
+      "EmptyIPFSCID"
+    );
+  });
+
+  it("reverts when metadata CID is empty", async function () {
+    await expect(
+      contract.connect(seller).mint(
+        "QmCID",
+        "",
+        5_000_000n,
+        0,
+        80
+      )
+    ).to.be.revertedWithCustomError(
+      contract,
+      "EmptyMetadataCID"
+    );
   });
 
   it("reverts when price is below 1 USDC", async function () {
@@ -92,7 +110,49 @@ describe("KnowledgeAsset", function () {
         0,
         80
       )
-    ).to.be.revertedWith("Minimum price is 1 USDC");
+    ).to.be.revertedWithCustomError(
+      contract,
+      "PriceTooLow"
+    ).withArgs(500_000n, 1_000_000n);
+  });
+
+  it("reverts when price is above 100 USDC", async function () {
+    await expect(
+      contract.connect(seller).mint(
+        "QmCID",
+        "QmMeta",
+        200_000_000n,
+        0,
+        80
+      )
+    ).to.be.revertedWithCustomError(
+      contract,
+      "PriceTooHigh"
+    ).withArgs(200_000_000n, 100_000_000n);
+  });
+
+  it("reverts when quality score exceeds 100", async function () {
+    await expect(
+      contract.connect(seller).mint(
+        "QmCID",
+        "QmMeta",
+        5_000_000n,
+        0,
+        101
+      )
+    ).to.be.revertedWithCustomError(
+      contract,
+      "QualityScoreTooHigh"
+    ).withArgs(101n, 100n);
+  });
+
+  it("reverts when looking up a nonexistent asset", async function () {
+    await expect(
+      contract.getAsset(999)
+    ).to.be.revertedWithCustomError(
+      contract,
+      "AssetDoesNotExist"
+    ).withArgs(999n);
   });
 
   it("allows seller to update price", async function () {
@@ -128,8 +188,113 @@ describe("KnowledgeAsset", function () {
         1,
         10_000_000n
       )
-    ).to.be.revertedWith(
-      "Only the NFT owner can update the price"
+    ).to.be.revertedWithCustomError(
+      contract,
+      "NotAssetOwner"
+    );
+  });
+
+  it("prevents updating the price of an inactive asset", async function () {
+    await contract.connect(seller).mint(
+      "QmCID",
+      "QmMeta",
+      5_000_000n,
+      0,
+      80
+    );
+
+    await contract.connect(seller).deactivate(1);
+
+    await expect(
+      contract.connect(seller).updatePrice(
+        1,
+        10_000_000n
+      )
+    ).to.be.revertedWithCustomError(
+      contract,
+      "AssetInactive"
+    );
+  });
+
+  it("allows the owner to deactivate an asset", async function () {
+    await contract.connect(seller).mint(
+      "QmCID",
+      "QmMeta",
+      5_000_000n,
+      0,
+      80
+    );
+
+    await contract.connect(seller).deactivate(1);
+
+    const asset = await contract.getAsset(1);
+
+    expect(asset.active).to.equal(false);
+  });
+
+  it("prevents non-owner from deactivating", async function () {
+    await contract.connect(seller).mint(
+      "QmCID",
+      "QmMeta",
+      5_000_000n,
+      0,
+      80
+    );
+
+    await expect(
+      contract.connect(buyer).deactivate(1)
+    ).to.be.revertedWithCustomError(
+      contract,
+      "NotAssetOwner"
+    );
+  });
+
+  it("prevents deactivating an already-inactive asset", async function () {
+    await contract.connect(seller).mint(
+      "QmCID",
+      "QmMeta",
+      5_000_000n,
+      0,
+      80
+    );
+
+    await contract.connect(seller).deactivate(1);
+
+    await expect(
+      contract.connect(seller).deactivate(1)
+    ).to.be.revertedWithCustomError(
+      contract,
+      "AlreadyInactive"
+    );
+  });
+
+  it("emits AssetDeactivated event", async function () {
+    await contract.connect(seller).mint(
+      "QmCID",
+      "QmMeta",
+      5_000_000n,
+      0,
+      80
+    );
+
+    await expect(
+      contract.connect(seller).deactivate(1)
+    )
+      .to.emit(contract, "AssetDeactivated")
+      .withArgs(1n);
+  });
+
+  it("returns an ipfs:// tokenURI pointing at the metadata CID", async function () {
+    await contract.connect(seller).mint(
+      "QmCID",
+      "QmMetadata_Test",
+      5_000_000n,
+      0,
+      80
+    );
+
+    expect(await contract.tokenURI(1)).to.equal(
+      "ipfs://QmMetadata_Test"
     );
   });
 });

@@ -20,6 +20,12 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./interfaces/IRoyaltySplitter.sol";
 
+/// @title RoyaltySplitter
+/// @notice Holds USDC forwarded from Marketplace for a sale, deducts a
+///         platform fee, pays royalty recipients their configured
+///         shares, and sends the remainder to the seller.
+/// @dev `distributeRoyalty` is restricted to the configured
+///      `marketplace` address — see that variable's doc comment.
 contract RoyaltySplitter is
     Ownable,
     ReentrancyGuard,
@@ -36,10 +42,14 @@ contract RoyaltySplitter is
     error InvalidPlatformFee();
     error InvalidRecipient();
     error InvalidRoyaltyShare();
-    error InvalidTotalShares();
     error InvalidAmount();
     error TooManyRecipients();
     error DuplicateRecipient();
+    error InvalidSeller();
+    error SellerCannotBeRecipient();
+    error RoyaltyExceedsMaximum();
+    error InvalidMarketplace();
+    error NotMarketplace();
 
     /*//////////////////////////////////////////////////////////////
                               CONSTANTS
@@ -54,6 +64,11 @@ contract RoyaltySplitter is
     /// @notice Maximum royalty recipients
     uint8 public constant MAX_RECIPIENTS = 10;
 
+    /// @notice Maximum total royalty share = 20% of the royalty pool.
+    ///         The seller receives whatever remains after the platform
+    ///         fee and royalty recipients are paid.
+    uint16 public constant MAX_ROYALTY_BPS = 2_000;
+
     /*//////////////////////////////////////////////////////////////
                                STORAGE
     //////////////////////////////////////////////////////////////*/
@@ -67,7 +82,34 @@ contract RoyaltySplitter is
     /// @inheritdoc IRoyaltySplitter
     uint16 public override platformFeeBps;
 
+    /// @inheritdoc IRoyaltySplitter
+    /// @dev Not set in the constructor because of a circular deployment
+    ///      dependency: Marketplace's constructor takes this contract's
+    ///      address, so this contract must exist first and can't yet
+    ///      know Marketplace's address. Set it once via
+    ///      `updateMarketplace` right after Marketplace is deployed.
+    ///      `distributeRoyalty` reverts for any other caller until then.
+    address public override marketplace;
 
+    /*//////////////////////////////////////////////////////////////
+                                EVENTS
+    //////////////////////////////////////////////////////////////*/
+
+    /*//////////////////////////////////////////////////////////////
+                              MODIFIERS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Restricts `distributeRoyalty` to the configured Marketplace.
+    ///      Without this, `distributeRoyalty` had no access control at
+    ///      all: anyone could call it directly and redirect whatever
+    ///      USDC balance this contract happened to hold (e.g. dust,
+    ///      or a not-yet-distributed transfer) to a `seller` and
+    ///      `recipients` of their own choosing.
+    modifier onlyMarketplace() {
+        if (msg.sender != marketplace)
+            revert NotMarketplace();
+        _;
+    }
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
@@ -96,10 +138,9 @@ contract RoyaltySplitter is
                          FEE CALCULATIONS
     //////////////////////////////////////////////////////////////*/
 
-    /**
-     * @notice Calculates platform fee.
-     * @param amount Purchase amount.
-     */
+    /// @notice Calculates the platform fee for a sale amount.
+    /// @param amount Purchase amount, in USDC base units.
+    /// @return The platform's cut, in USDC base units.
     function calculatePlatformFee(
         uint256 amount
     )
@@ -112,11 +153,17 @@ contract RoyaltySplitter is
             / BPS_DENOMINATOR;
     }
 
-    /**
-     * @notice Calculates royalty pool after
-     *         platform fee deduction.
-     */
-    function calculateSellerAmount(
+    /// @notice Calculates the royalty pool for a sale amount, i.e.
+    ///         `amount` minus the platform fee.
+    /// @dev This is NOT the seller's take-home amount — royalty
+    ///      recipients are paid out of this pool first, and the seller
+    ///      receives whatever remains after that (see
+    ///      `distributeRoyalty`). Renamed from `calculateSellerAmount`,
+    ///      which was misleading: the seller does not receive the full
+    ///      pool.
+    /// @param amount Purchase amount, in USDC base units.
+    /// @return The royalty pool, in USDC base units.
+    function calculateRoyaltyPool(
         uint256 amount
     )
         public
@@ -128,14 +175,13 @@ contract RoyaltySplitter is
             - calculatePlatformFee(amount);
     }
 
-        /*//////////////////////////////////////////////////////////////
+    /*//////////////////////////////////////////////////////////////
                          ADMIN FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    /**
-     * @notice Updates the treasury wallet.
-     * @dev Only callable by the owner.
-     */
+    /// @notice Updates the treasury wallet that receives platform fees.
+    /// @dev Only callable by the owner.
+    /// @param newTreasury New treasury address; must be non-zero.
     function updateTreasury(
         address newTreasury
     )
@@ -156,10 +202,10 @@ contract RoyaltySplitter is
         );
     }
 
-    /**
-     * @notice Updates platform fee.
-     * @dev Fee is stored in Basis Points.
-     */
+    /// @notice Updates the platform fee.
+    /// @dev Fee is stored in basis points. Only callable by the owner.
+    /// @param newFeeBps New fee, in basis points; must not exceed
+    ///        `MAX_PLATFORM_FEE`.
     function updatePlatformFee(
         uint16 newFeeBps
     )
@@ -180,34 +226,75 @@ contract RoyaltySplitter is
         );
     }
 
+    /// @notice Updates the only address allowed to call
+    ///         `distributeRoyalty`.
+    /// @dev Only callable by the owner. Must be called once, after
+    ///      Marketplace is deployed, before any sale can settle — see
+    ///      the `marketplace` storage variable's doc comment for why
+    ///      this can't just be a constructor argument.
+    /// @param newMarketplace New authorized caller; must be non-zero.
+    function updateMarketplace(
+        address newMarketplace
+    )
+        external
+        override
+        onlyOwner
+    {
+        if (newMarketplace == address(0))
+            revert InvalidMarketplace();
+
+        address oldMarketplace = marketplace;
+
+        marketplace = newMarketplace;
+
+        emit MarketplaceUpdated(
+            oldMarketplace,
+            newMarketplace
+        );
+    }
+
     /*//////////////////////////////////////////////////////////////
                         INTERNAL VALIDATION
     //////////////////////////////////////////////////////////////*/
 
-    /**
-     * @dev Validates royalty recipients.
-     */
+    /// @dev Validates royalty recipients: non-empty, within
+    ///      `MAX_RECIPIENTS`, no zero addresses, no duplicates, none
+    ///      equal to `seller`, no zero shares, and total shares within
+    ///      `MAX_ROYALTY_BPS`.
+    /// @param seller The address that will receive the remainder of the
+    ///        royalty pool; recipients may not also be the seller.
+    /// @param recipients Royalty recipients and their basis-point
+    ///        shares.
     function _validateRecipients(
+        address seller,
         RoyaltyRecipient[] calldata recipients
     )
         internal
         pure
     {
-        uint256 totalShares;
+        uint256 length = recipients.length;
 
-        if (recipients.length == 0)
+        if (length == 0)
             revert InvalidRecipient();
 
-        if (recipients.length > MAX_RECIPIENTS)
+        if (length > MAX_RECIPIENTS)
             revert TooManyRecipients();
 
-        for (uint256 i = 0; i < recipients.length; i++) {
+        uint256 totalShares;
+
+        for (uint256 i = 0; i < length;) {
 
             if (
                 recipients[i].wallet
                 == address(0)
             )
                 revert InvalidRecipient();
+
+            if (
+                recipients[i].wallet
+                == seller
+            )
+                revert SellerCannotBeRecipient();
 
             if (
                 recipients[i].shareBps == 0
@@ -217,10 +304,11 @@ contract RoyaltySplitter is
             totalShares +=
                 recipients[i].shareBps;
 
-            // Duplicate wallet check
+            // Duplicate wallet check. Bounded by MAX_RECIPIENTS (10),
+            // so this is at most 45 comparisons — not a DoS vector.
             for (
                 uint256 j = i + 1;
-                j < recipients.length;
+                j < length;
                 j++
             ) {
 
@@ -231,52 +319,58 @@ contract RoyaltySplitter is
                 )
                     revert DuplicateRecipient();
             }
+
+            unchecked {
+                // Bounded by `length <= MAX_RECIPIENTS`; can't overflow.
+                ++i;
+            }
         }
 
+        // Royalty recipients may not claim more than
+        // MAX_ROYALTY_BPS of the royalty pool. Whatever
+        // is left over goes to the seller.
         if (
             totalShares
-            !=
-            BPS_DENOMINATOR
+            >
+            MAX_ROYALTY_BPS
         )
-            revert InvalidTotalShares();
-    }
-
-    /**
-     * @dev Calculates royalty pool after
-     *      deducting platform fee.
-     */
-    function _royaltyPool(
-        uint256 amount
-    )
-        internal
-        view
-        returns (uint256)
-    {
-        return amount
-            - calculatePlatformFee(amount);
+            revert RoyaltyExceedsMaximum();
     }
 
     /*//////////////////////////////////////////////////////////////
                      ROYALTY DISTRIBUTION ENGINE
     //////////////////////////////////////////////////////////////*/
 
-    /**
-     * @notice Distributes royalty payments.
-     * @dev Marketplace must transfer the payment tokens
-     *      to this contract before calling this function.
-     */
+    /// @notice Distributes a sale's proceeds: platform fee to treasury,
+    ///         royalty shares to recipients, and the remainder to the
+    ///         seller.
+    /// @dev Caller must be the configured `marketplace`, and must have
+    ///      already transferred `totalAmount` of `usdc` to this
+    ///      contract before calling.
+    /// @param seller Receives the royalty pool remainder after
+    ///        recipients are paid. Must be non-zero and must not also
+    ///        appear in `recipients`.
+    /// @param recipients Royalty recipients and their basis-point
+    ///        shares of the royalty pool; total must not exceed
+    ///        `MAX_ROYALTY_BPS`.
+    /// @param totalAmount Total sale amount, in USDC base units.
     function distributeRoyalty(
+        address seller,
         RoyaltyRecipient[] calldata recipients,
         uint256 totalAmount
     )
         external
         override
+        onlyMarketplace
         nonReentrant
     {
+        if (seller == address(0))
+            revert InvalidSeller();
+
         if (totalAmount == 0)
             revert InvalidAmount();
 
-        _validateRecipients(recipients);
+        _validateRecipients(seller, recipients);
 
         //----------------------------------------------------------
         // Calculate amounts
@@ -287,6 +381,8 @@ contract RoyaltySplitter is
 
         uint256 royaltyAmount =
             totalAmount - platformFee;
+
+        uint256 recipientsPaid;
 
         //----------------------------------------------------------
         // Pay Platform
@@ -309,16 +405,16 @@ contract RoyaltySplitter is
         // Pay Royalty Recipients
         //----------------------------------------------------------
 
-        for (
-            uint256 i = 0;
-            i < recipients.length;
-            i++
-        ) {
+        uint256 length = recipients.length;
+
+        for (uint256 i = 0; i < length;) {
 
             uint256 payment =
                 (royaltyAmount *
                     recipients[i].shareBps)
                 / BPS_DENOMINATOR;
+
+            recipientsPaid += payment;
 
             usdc.safeTransfer(
                 recipients[i].wallet,
@@ -329,6 +425,31 @@ contract RoyaltySplitter is
                 recipients[i].wallet,
                 payment
             );
+
+            unchecked {
+                // Bounded by `length <= MAX_RECIPIENTS`; can't overflow.
+                ++i;
+            }
+        }
+
+        //----------------------------------------------------------
+        // Pay Seller (remainder of the royalty pool)
+        //----------------------------------------------------------
+
+        uint256 sellerAmount =
+            royaltyAmount - recipientsPaid;
+
+        if (sellerAmount > 0) {
+
+            usdc.safeTransfer(
+                seller,
+                sellerAmount
+            );
+
+            emit SellerPaid(
+                seller,
+                sellerAmount
+            );
         }
 
         //----------------------------------------------------------
@@ -338,34 +459,5 @@ contract RoyaltySplitter is
         emit RoyaltyDistributed(
             totalAmount
         );
-    }
-        /*//////////////////////////////////////////////////////////////
-                            VIEW FUNCTIONS
-    //////////////////////////////////////////////////////////////*/
-
-    /**
-     * @notice Returns the USDC token address used for payments.
-     */
-    function usdcToken()
-        external
-        view
-        returns (address)
-    {
-        return address(usdc);
-    }
-
-    /**
-     * @notice Returns the royalty pool after deducting
-     *         the platform fee.
-     * @param totalAmount Purchase amount.
-     */
-    function getroyaltyPool(
-        uint256 totalAmount
-    )
-        external
-        view
-        returns (uint256)
-    {
-        return _royaltyPool(totalAmount);
     }
 }
