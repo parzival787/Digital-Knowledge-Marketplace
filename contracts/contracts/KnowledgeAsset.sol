@@ -40,6 +40,7 @@ contract KnowledgeAsset is ERC721 {
     error NotAssetOwner();
     error AssetInactive();
     error AlreadyInactive();
+    error NonTransferable();
 
     /*//////////////////////////////////////////////////////////////
                                CONSTANTS
@@ -251,6 +252,47 @@ contract KnowledgeAsset is ERC721 {
 
         emit AssetDeactivated(tokenId);
     }
+
+
+/**
+ * @dev Makes the NFT non-transferable.
+ *
+ * Minting is allowed:
+ *      from == address(0)
+ *
+ * Burning is allowed:
+ *      to == address(0)
+ *
+ * Normal transfers are NOT allowed:
+ *      from != address(0)
+ *      && to != address(0)
+ */
+function _beforeTokenTransfer(
+    address from,
+    address to,
+    uint256 firstTokenId,
+    uint256 batchSize
+)
+    internal
+    virtual
+    override
+{
+    super._beforeTokenTransfer(
+        from,
+        to,
+        firstTokenId,
+        batchSize
+    );
+
+    // Allow minting and burning.
+    if (from == address(0) || to == address(0)) {
+        return;
+    }
+
+    // Block normal NFT transfers.
+    revert NonTransferable();
+}
+
 
     /*//////////////////////////////////////////////////////////////
                               VIEW HELPERS

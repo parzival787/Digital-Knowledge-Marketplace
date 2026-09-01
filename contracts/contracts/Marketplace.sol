@@ -9,7 +9,8 @@ pragma solidity ^0.8.20;
  * - Fixed Price Sales
  * - Auctions
  * - Automatic Royalty Distribution
- * - ERC721 Transfer
+ * - Creator-Owned ERC721
+ * - License/Access Purchases
  * - MockUSDC Payments
  * ============================================================
  */
@@ -24,8 +25,9 @@ import "./interfaces/IKnowledgeAsset.sol";
 import "./interfaces/IRoyaltySplitter.sol";
 
 /// @title Marketplace
-/// @notice Fixed-price and auction sales for KnowledgeAsset NFTs, paid in
-///         USDC, with royalties distributed via RoyaltySplitter.
+/// @notice Fixed-price and auction license sales for KnowledgeAsset assets,
+///         paid in USDC, with royalties distributed via RoyaltySplitter.
+///         The original creator retains ERC721 ownership.
 /// @dev Does not implement `IMarketplace` — that interface's function
 ///      signatures (`listAsset`, `purchaseAsset`, `cancelListing(tokenId)`)
 ///      don't match this contract's actual API (`listFixedPrice`,
@@ -204,6 +206,21 @@ contract Marketplace is
     /// @dev Outbid refunds are no longer pushed automatically in
     ///      `placeBid` — see that function's doc comment for why.
     mapping(address => uint256) public pendingRefunds;
+    /// @notice Number of license purchases made by each buyer for each asset.
+    /// @dev The buyer does NOT receive the ERC721 NFT. The original creator
+    ///      remains the NFT owner. This mapping records the buyer's purchase
+    ///      entitlement for the asset.
+    mapping(uint256 => mapping(address => uint256)) public purchaseCount;
+
+    function hasPurchased(
+    uint256 tokenId,
+    address buyer
+) external view returns (bool) {
+    return purchaseCount[tokenId][buyer] > 0;
+}
+
+
+
 
     /*//////////////////////////////////////////////////////////////
                               EVENTS
@@ -302,12 +319,6 @@ contract Marketplace is
         if (knowledgeAsset.ownerOf(tokenId) != msg.sender)
             revert NotNFTOwner();
 
-        if (
-            knowledgeAsset.getApproved(tokenId) != address(this)
-            &&
-            !knowledgeAsset.isApprovedForAll(msg.sender, address(this))
-        )
-            revert MarketplaceNotApproved();
 
         // Prevent duplicate active listing
         uint256 existingListing = tokenToListing[tokenId];
@@ -323,11 +334,8 @@ contract Marketplace is
 
         uint256 length = recipients.length;
 
-        if (length == 0)
-            revert NoRecipients();
-
         if (length > MAX_RECIPIENTS)
-            revert TooManyRecipients();
+    revert TooManyRecipients();
 
         uint256 totalShares;
 
@@ -454,11 +462,9 @@ contract Marketplace is
             price
         );
 
-        knowledgeAsset.safeTransferFrom(
-            seller,
-            msg.sender,
-            tokenId
-        );
+        // Record the buyer's license/purchase entitlement.
+        // The ERC721 NFT remains owned by the original creator.
+        purchaseCount[tokenId][msg.sender] += 1;
 
         emit PurchaseCompleted(
             listingId,
@@ -501,13 +507,6 @@ contract Marketplace is
         if (knowledgeAsset.ownerOf(tokenId) != msg.sender)
             revert NotNFTOwner();
 
-        if (
-            knowledgeAsset.getApproved(tokenId) != address(this)
-            &&
-            !knowledgeAsset.isApprovedForAll(msg.sender, address(this))
-        )
-            revert MarketplaceNotApproved();
-
         if (tokenToAuction[tokenId] != 0)
             revert AuctionAlreadyExists();
 
@@ -519,11 +518,8 @@ contract Marketplace is
 
         uint256 length = recipients.length;
 
-        if (length == 0)
-            revert NoRecipients();
-
         if (length > MAX_RECIPIENTS)
-            revert TooManyRecipients();
+    revert TooManyRecipients();
 
         uint256 totalShares;
 
@@ -753,11 +749,9 @@ contract Marketplace is
         // Transfer NFT
         //------------------------------------------------------------
 
-        knowledgeAsset.safeTransferFrom(
-            auction.seller,
-            auction.highestBidder,
-            auction.tokenId
-        );
+        // Record the winning bidder's license/purchase entitlement.
+        // The ERC721 NFT remains owned by the original creator.
+        purchaseCount[auction.tokenId][auction.highestBidder] += 1;
 
         emit AuctionEnded(
             auction.tokenId,

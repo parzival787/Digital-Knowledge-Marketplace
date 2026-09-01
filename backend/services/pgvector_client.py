@@ -226,3 +226,53 @@ async def update_token_id(vector_id: str, token_id: int):
     finally:
         await conn.close()
 
+
+async def get_asset_by_token_id(token_id: int):
+    conn = await get_conn()
+
+    try:
+        row = await conn.fetchrow(
+            """
+            SELECT
+                id,
+                vector_id,
+                file_cid,
+                metadata_cid,
+                title,
+                domain,
+                tags,
+                quality,
+                price_usdc,
+                token_id,
+                blake3_hash,
+                created_at
+            FROM knowledge_assets
+            WHERE token_id = $1
+            LIMIT 1
+            """,
+            token_id,
+        )
+
+        if not row:
+            return None
+
+        return {
+            "id": row["id"],
+            "vector_id": row["vector_id"],
+            "file_cid": row["file_cid"],
+            "metadata_cid": row["metadata_cid"],
+            "title": row["title"],
+            "domain": row["domain"],
+            "tags": list(row["tags"] or []),
+            "quality": float(row["quality"]),
+            "price_usdc": row["price_usdc"],
+            "token_id": row["token_id"],
+            "blake3_hash": row["blake3_hash"],
+            "created_at": row["created_at"].isoformat()
+                if row["created_at"]
+                else None,
+        }
+
+    finally:
+        await conn.close()
+

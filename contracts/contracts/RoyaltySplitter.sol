@@ -274,11 +274,8 @@ contract RoyaltySplitter is
     {
         uint256 length = recipients.length;
 
-        if (length == 0)
-            revert InvalidRecipient();
-
         if (length > MAX_RECIPIENTS)
-            revert TooManyRecipients();
+    revert TooManyRecipients();
 
         uint256 totalShares;
 

@@ -731,12 +731,78 @@ it("rejects more than MAX_RECIPIENTS royalty recipients", async function () {
         .connect(buyer)
         .buyAsset(1);
 
+    // NFT ownership remains with the original creator/seller
     expect(
         await knowledgeAsset.ownerOf(1)
     ).to.equal(
-        buyer.address
+        seller.address
     );
 
+    // Buyer receives a purchase/license entitlement
+    expect(
+        await marketplace.purchaseCount(
+            1,
+            buyer.address
+        )
+    ).to.equal(1);
+
+});
+
+it("prevents buyer from reselling purchased NFT", async function () {
+
+    // Creator lists the NFT
+    await createListing();
+
+    // Give buyer enough USDC
+    await usdc.mint(
+        buyer.address,
+        PRICE
+    );
+
+    // Approve Marketplace to spend buyer's USDC
+    await usdc
+        .connect(buyer)
+        .approve(
+            await marketplace.getAddress(),
+            PRICE
+        );
+
+    // Buyer purchases the license/access
+    await marketplace
+        .connect(buyer)
+        .buyAsset(1);
+
+    // NFT must still belong to the original creator
+    expect(
+        await knowledgeAsset.ownerOf(1)
+    ).to.equal(
+        seller.address
+    );
+
+    // Buyer must have the purchase entitlement
+    expect(
+        await marketplace.purchaseCount(
+            1,
+            buyer.address
+        )
+    ).to.equal(1);
+
+    // Buyer must NOT be able to list the creator's NFT
+    await expect(
+        marketplace
+            .connect(buyer)
+            .listFixedPrice(
+                1,
+                PRICE,
+                royaltyRecipients(
+                    professor,
+                    university
+                )
+            )
+    ).to.be.revertedWithCustomError(
+        marketplace,
+        "NotNFTOwner"
+    );
 });
 
 it("marks listing inactive after purchase", async function () {
@@ -1262,7 +1328,52 @@ it("marks listing inactive after purchase", async function () {
         await marketplace.pendingRefunds(buyer.address)
     ).to.equal(0);
 
-});it("rejects withdrawRefund with nothing owed", async function () {
+});
+it("returns true for buyer after purchase", async function () {
+
+    await createListing();
+
+    await usdc.mint(
+        buyer.address,
+        PRICE
+    );
+
+    await usdc
+        .connect(buyer)
+        .approve(
+            await marketplace.getAddress(),
+            PRICE
+        );
+
+    await marketplace
+        .connect(buyer)
+        .buyAsset(1);
+
+    expect(
+        await marketplace.hasPurchased(
+            1,
+            buyer.address
+        )
+    ).to.equal(true);
+});
+    
+it("returns false for wallet that has not purchased", async function () {
+
+    await createListing();
+
+    expect(
+        await marketplace.hasPurchased(
+            1,
+            buyer.address
+        )
+    ).to.equal(false);
+});
+
+
+
+
+
+it("rejects withdrawRefund with nothing owed", async function () {
 
     await expect(
         marketplace.connect(buyer).withdrawRefund()
@@ -1347,19 +1458,68 @@ it("marks listing inactive after purchase", async function () {
         await marketplace.isAuctionActive(1)
     ).to.equal(false);
 
-});it("transfers NFT to winner", async function () {
+});it("keeps NFT with creator after auction", async function () {
 
     await createFinishedAuction();
 
     await marketplace.endAuction(1);
 
     expect(
+    await knowledgeAsset.ownerOf(1)
+).to.equal(
+    seller.address
+);
+
+// Auction winner receives a purchase/license entitlement
+expect(
+    await marketplace.purchaseCount(
+        1,
+        buyer.address
+    )
+).to.equal(1);
+
+});
+it("prevents auction winner from reselling purchased NFT", async function () {
+
+    await createFinishedAuction();
+
+    await marketplace.endAuction(1);
+
+    // NFT remains with the original creator
+    expect(
         await knowledgeAsset.ownerOf(1)
     ).to.equal(
-        buyer.address
+        seller.address
     );
 
-});it("emits AuctionEnded", async function () {
+    // Auction winner received the purchase/license entitlement
+    expect(
+        await marketplace.purchaseCount(
+            1,
+            buyer.address
+        )
+    ).to.equal(1);
+
+    // Auction winner must not be able to resell the NFT
+    await expect(
+        marketplace
+            .connect(buyer)
+            .listFixedPrice(
+                1,
+                PRICE,
+                royaltyRecipients(
+                    professor,
+                    university
+                )
+            )
+    ).to.be.revertedWithCustomError(
+        marketplace,
+        "NotNFTOwner"
+    );
+});
+
+
+it("emits AuctionEnded", async function () {
 
     await createFinishedAuction();
 
