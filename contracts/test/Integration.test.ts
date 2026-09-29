@@ -267,9 +267,11 @@ it("completes an entire NFT sale", async function () {
 
     ).to.equal(
 
-        buyer.address
+        seller.address
 
     );
+    expect(await marketplace.hasPurchased(1, buyer.address)).to.equal(true);
+    expect(await marketplace.purchaseCount(1, buyer.address)).to.equal(1n);
 
     /*------------------------------------
             Verify Listing Closed
@@ -455,8 +457,10 @@ it("updates marketplace state after purchase", async function () {
     expect(
         await knowledgeAsset.ownerOf(1)
     ).to.equal(
-        buyer.address
+        seller.address
     );
+    expect(await marketplace.hasPurchased(1, buyer.address)).to.equal(true);
+    expect(await marketplace.purchaseCount(1, buyer.address)).to.equal(1n);
 
 });it("emits PurchaseCompleted in integration flow", async function () {
 
@@ -631,8 +635,10 @@ describe("Auction Workflow", function () {
         expect(
             await knowledgeAsset.ownerOf(1)
         ).to.equal(
-            professor.address
+            seller.address
         );
+    expect(await marketplace.hasPurchased(1, professor.address)).to.equal(true);
+    expect(await marketplace.purchaseCount(1, professor.address)).to.equal(1n);
 
         expect(
             await marketplace.isAuctionActive(1)
@@ -893,11 +899,15 @@ describe("Multiple Marketplace Workflows", function () {
 
     expect(
         await knowledgeAsset.ownerOf(1)
-    ).to.equal(buyer.address);
+    ).to.equal(seller.address);
+    expect(await marketplace.hasPurchased(1, buyer.address)).to.equal(true);
+    expect(await marketplace.purchaseCount(1, buyer.address)).to.equal(1n);
 
     expect(
         await knowledgeAsset.ownerOf(2)
-    ).to.equal(buyer.address);
+    ).to.equal(seller.address);
+    expect(await marketplace.hasPurchased(2, buyer.address)).to.equal(true);
+    expect(await marketplace.purchaseCount(2, buyer.address)).to.equal(1n);
 
 });
 it("supports listing and auction simultaneously", async function () {

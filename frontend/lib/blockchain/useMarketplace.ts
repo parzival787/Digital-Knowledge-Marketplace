@@ -4,6 +4,7 @@ import {
   useReadContract,
   useWriteContract,
 } from "wagmi";
+import { polygonAmoy } from "viem/chains";
 
 import {
   marketplaceContract,
@@ -94,8 +95,10 @@ export function useMarketplaceWrite() {
     });
   }
 
-  function buyAsset(listingId: bigint) {
-  purchaseWrite.writeContract({
+  function buyAsset(listingId: bigint, account: `0x${string}`) {
+  return purchaseWrite.writeContractAsync({
+    account,
+    chainId: polygonAmoy.id,
     address: marketplaceContract.address,
     abi: marketplaceContract.abi,
     functionName: "buyAsset",
@@ -128,8 +131,10 @@ export function useMarketplaceWrite() {
 export function useUSDCWrite() {
   const usdcApproval = useWriteContract();
 
-  function approveMarketplace(amount: bigint) {
-    usdcApproval.writeContract({
+  function approveMarketplace(amount: bigint, account: `0x${string}`) {
+    return usdcApproval.writeContractAsync({
+      account,
+      chainId: polygonAmoy.id,
       address: mockUSDCContract.address,
       abi: mockUSDCContract.abi,
       functionName: "approve",

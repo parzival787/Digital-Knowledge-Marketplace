@@ -4,12 +4,6 @@ import RoyaltySplitterArtifact from "@/contracts/abi/RoyaltySplitter.json";
 import MockUSDCArtifact from "@/contracts/abi/MockERC20.json";
 
 import { CONTRACTS } from "@/contracts/addresses";
-console.log(
-  "KnowledgeAsset ABI:",
-  KnowledgeAssetArtifact.abi.find(
-    (item: any) => item.type === "function" && item.name === "getAsset"
-  )
-);
 
 export const knowledgeAssetContract = {
   address: CONTRACTS.KnowledgeAsset,

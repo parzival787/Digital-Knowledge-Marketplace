@@ -1,10 +1,8 @@
-import Navbar from "@/components/layout/Navbar";
 import BlockchainTest from "@/components/marketplace/BlockchainTest";
 
 export default function Home() {
   return (
     <>
-      <Navbar />
 
       <main className="mx-auto max-w-7xl px-6 py-20">
 

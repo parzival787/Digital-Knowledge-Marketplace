@@ -3,7 +3,6 @@
 import {
   useReadContract,
   useWriteContract,
-  useWaitForTransactionReceipt,
 } from "wagmi";
 
 import { knowledgeAssetContract, marketplaceContract } from "@/lib/blockchain/contracts";

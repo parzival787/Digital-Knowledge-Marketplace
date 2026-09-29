@@ -5,7 +5,15 @@ import { useEffect, useState } from "react";
 import {
   useAccount,
   useWaitForTransactionReceipt,
+  useReadContract,
+  useSwitchChain,
+  usePublicClient,
 } from "wagmi";
+import { useQueryClient } from "@tanstack/react-query";
+import { polygonAmoy } from "viem/chains";
+import AuctionPanel from "./AuctionPanel";
+import Web2Checkout from "./Web2Checkout";
+import { marketplaceContract, mockUSDCContract } from "@/lib/blockchain/contracts";
 
 import {
   useIsListed,
@@ -51,13 +59,15 @@ function formatUSDC(value: bigint) {
 export default function AssetCard({
   tokenId,
   asset,
+  saleMode = "all",
 }: {
   tokenId: bigint;
   asset: Asset;
+  saleMode?: string;
 }) {
   const [showDetails, setShowDetails] = useState(false);
 
-  const [metadata, setMetadata] = useState<any>(null);
+  const [metadata, setMetadata] = useState<Record<string, unknown> | null>(null);
   const [loadingMetadata, setLoadingMetadata] = useState(false);
   const [metadataError, setMetadataError] = useState("");
 
@@ -76,7 +86,16 @@ export default function AssetCard({
     "idle" | "approving" | "buying"
   >("idle");
 
-  const { address: connectedAddress } = useAccount();
+  const { address: connectedAddress, chainId } = useAccount();
+  const { switchChain } = useSwitchChain();
+  const cache = useQueryClient();
+  const publicClient = usePublicClient({ chainId: polygonAmoy.id });
+  const { data: auctionIdData } = useReadContract({ ...marketplaceContract,
+    chainId: polygonAmoy.id, functionName: "tokenToAuction", args: [tokenId], query: { refetchInterval: 10000 } });
+  const auctionId = (auctionIdData as bigint | undefined) ?? 0n;
+  const { data: purchased } = useReadContract({ ...marketplaceContract,
+    chainId: polygonAmoy.id, functionName: "hasPurchased", args: [tokenId, connectedAddress],
+    query: { enabled: !!connectedAddress, refetchInterval: 10000 } });
 
   const {
   data: assetOwner,
@@ -123,12 +142,10 @@ export default function AssetCard({
     approveNFT,
     nftApprovalHash,
     isNFTApprovalPending,
-    nftApprovalError,
 
     listFixedPrice,
     listingHash,
     isListingPending,
-    listingError: marketplaceListingError,
 
     buyAsset,
     purchaseHash,
@@ -157,7 +174,6 @@ export default function AssetCard({
 
   const {
     isLoading: isUSDCApprovalConfirming,
-    isSuccess: isUSDCApprovalConfirmed,
   } = useWaitForTransactionReceipt({
     hash: usdcApproveHash,
   });
@@ -170,6 +186,7 @@ export default function AssetCard({
 
   const {
     isLoading: isListingConfirming,
+    isSuccess: isListingConfirmed,
   } = useWaitForTransactionReceipt({
     hash: listingHash,
   });
@@ -256,6 +273,10 @@ export default function AssetCard({
    */
 
   function handleList() {
+  if (chainId !== polygonAmoy.id) {
+    setListingError("Switch to Polygon Amoy before listing.");
+    return;
+  }
   if (!connectedAddress) {
     setListingError("Please connect your wallet first.");
     return;
@@ -339,13 +360,18 @@ export default function AssetCard({
    * ============================================================
    */
 
-  function handleBuy() {
+  async function handleBuy() {
     setBuyError("");
 
     if (!connectedAddress) {
       setBuyError(
         "Please connect your wallet first."
       );
+      return;
+    }
+
+    if (chainId !== polygonAmoy.id) {
+      setBuyError("Switch to Polygon Amoy before purchasing.");
       return;
     }
 
@@ -363,10 +389,27 @@ export default function AssetCard({
       return;
     }
 
-    const purchasePrice = marketplacePrice;
-    setBuyStep("approving");
-
-    approveMarketplace(purchasePrice);
+    if (!publicClient || marketplacePrice <= 0n) return;
+    try {
+      setBuyStep("approving");
+      const balance = await publicClient.readContract({ ...mockUSDCContract, functionName: "balanceOf", args: [connectedAddress] }) as bigint;
+      if (balance < marketplacePrice) throw new Error("Insufficient USDC");
+      const allowance = await publicClient.readContract({ ...mockUSDCContract, functionName: "allowance", args: [connectedAddress, marketplaceContract.address] }) as bigint;
+      if (allowance < marketplacePrice) {
+        const approvalHash = await approveMarketplace(marketplacePrice, connectedAddress);
+        const approval = await publicClient.waitForTransactionReceipt({ hash: approvalHash });
+        if (approval.status !== "success") throw new Error("Approval reverted");
+      }
+      setBuyStep("buying");
+      const hash = await buyAsset(BigInt(listingId as bigint), connectedAddress);
+      const purchase = await publicClient.waitForTransactionReceipt({ hash });
+      if (purchase.status !== "success") throw new Error("Purchase reverted");
+      await cache.invalidateQueries();
+    } catch {
+      setBuyError("Purchase failed or was cancelled. Check your USDC balance and POL for gas, then retry.");
+    } finally {
+      setBuyStep("idle");
+    }
   }
 
   /*
@@ -375,12 +418,20 @@ export default function AssetCard({
    * ============================================================
    */
 
-  const listingData = listing as any;
+  // Solidity's public mapping getter returns six separate values (a tuple).
+  const listingData = listing as readonly [bigint, bigint, string, number, boolean, number] | undefined;
+  const marketplacePrice = listingData?.[1] ?? 0n;
 
-  const marketplacePrice =
-    listingData?.price !== undefined
-      ? BigInt(listingData.price)
-      : asset.priceUSDC;
+  useEffect(() => {
+    if (isListingConfirmed || isPurchaseConfirmed) void cache.invalidateQueries();
+  }, [isListingConfirmed, isPurchaseConfirmed, cache]);
+
+  useEffect(() => {
+    if (usdcError || purchaseError) {
+      setBuyStep("idle");
+      setBuyError("Transaction failed or was cancelled. Check your balances and retry.");
+    }
+  }, [usdcError, purchaseError]);
 
   /*
    * ============================================================
@@ -388,26 +439,6 @@ export default function AssetCard({
    * ============================================================
    */
 
-  useEffect(() => {
-    if (
-      buyStep !== "approving" ||
-      !isUSDCApprovalConfirmed ||
-      listingId === undefined
-    ) {
-      return;
-    }
-
-    setBuyStep("buying");
-
-    buyAsset(
-      BigInt(listingId as bigint)
-    );
-  }, [
-    buyStep,
-    isUSDCApprovalConfirmed,
-    listingId,
-    buyAsset,
-  ]);
 
   /*
    * ============================================================
@@ -437,6 +468,9 @@ export default function AssetCard({
    * RETURN
    * ============================================================
    */
+
+  if (saleMode === "auction" && !auctionId) return null;
+  if (saleMode === "fixed" && !isListed) return null;
 
   return (
     <div className="rounded-xl border p-6 shadow-sm">
@@ -555,6 +589,8 @@ export default function AssetCard({
 
           {isListingLoading ? (
             "Checking..."
+          ) : auctionId ? (
+            <span className="font-medium">Auction</span>
           ) : isListed ? (
             <span className="font-medium text-green-600">
               Listed
@@ -571,7 +607,7 @@ export default function AssetCard({
           SELL / LIST CONTROLS
       ====================================================== */}
 
-      {!isListed && (
+      {!isListed && !auctionId && isOwner && asset.active && (
   <div className="mt-6 space-y-3">
 
     {/* APPROVE NFT */}
@@ -765,7 +801,7 @@ export default function AssetCard({
           BUY CONTROLS
       ====================================================== */}
 
-      {isListed && (
+      {!!isListed && !isOwner && (
         <div className="mt-6 space-y-3">
 
           <div className="rounded-md border bg-gray-50 p-3 text-sm">
@@ -783,7 +819,7 @@ export default function AssetCard({
               isUSDCApprovePending ||
               isUSDCApprovalConfirming ||
               isPurchasePending ||
-              isPurchaseConfirming
+              isPurchaseConfirming || !listingData || marketplacePrice <= 0n || !asset.active || !!purchased
             }
             className="w-full rounded-md bg-black px-4 py-2 font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -822,8 +858,14 @@ export default function AssetCard({
             </div>
           )}
 
+
         </div>
       )}
+
+      {connectedAddress && chainId !== polygonAmoy.id && <button className="mt-4 rounded border p-2" onClick={() => switchChain({ chainId: polygonAmoy.id })}>Switch to Polygon Amoy</button>}
+      {purchased === true && <p className="mt-4 text-green-700" role="status">Purchase entitlement verified on-chain.</p>}
+      {connectedAddress && !isOwner && <Web2Checkout key={connectedAddress} tokenId={tokenId} buyer={connectedAddress} canStart={!!isListed && !purchased && asset.active} />}
+      <AuctionPanel tokenId={tokenId} auctionId={auctionId} price={asset.priceUSDC} canCreate={isOwner && !isListed && asset.active} />
 
       {/* ======================================================
           LISTING TRANSACTION HASH

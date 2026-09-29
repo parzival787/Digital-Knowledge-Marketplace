@@ -1,7 +1,7 @@
 # backend/main.py - COMPLETE FINAL VERSION FOR PHASE 1
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-import os, json, httpx
+import os, json, httpx, asyncio
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -24,6 +24,10 @@ from services.blockchain import (
     get_purchase_count,
     get_knowledge_asset,
 )
+from services.payments.models import CreatePaymentRequest, ConfirmPaymentRequest
+from services.payments.service import payment_service
+
+
 
 
 app = FastAPI(title="DKM API", version="1.0.0")
@@ -39,7 +43,21 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     await setup_tables()
+    if os.getenv("SETTLEMENT_ENABLED") == "true":
+        from services.payments.settlement import settlement_worker
+        app.state.settlement_task = asyncio.create_task(settlement_worker())
     print("DKM API started - pgvector tables ready")
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    task = getattr(app.state, "settlement_task", None)
+    if task:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 @app.get("/")
@@ -72,8 +90,8 @@ async def health():
         checks["ollama_running"] = False
         checks["ollama_error"] = str(e)
 
-    checks["nft_storage"] = bool(
-        os.environ.get("NFT_STORAGE_TOKEN")
+    checks["pinata"] = bool(
+        os.environ.get("PINATA_JWT")
     )
 
     checks["blockchain"] = bool(
@@ -404,3 +422,115 @@ async def link_token(
         "message": "Blockchain token linked to knowledge asset"
     }
 
+# =========================================================
+# PAYMENT API
+# =========================================================
+
+@app.post("/api/payments/webhook/razorpay")
+async def razorpay_webhook(request: Request):
+    import hashlib
+    import hmac
+    from services.pgvector_client import get_conn
+    secret = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
+    if not secret:
+        raise HTTPException(503, "Payment webhooks are not configured")
+    body = await request.body()
+    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected.encode(), request.headers.get("x-razorpay-signature", "").encode()):
+        raise HTTPException(400, "Invalid webhook signature")
+    try:
+        payload = json.loads(body)
+        if payload.get("event") != "payment.captured":
+            return {"received": True}
+        payment = payload["payload"]["payment"]["entity"]
+        provider_order_id, payment_id = payment["order_id"], payment["id"]
+    except (ValueError, KeyError, TypeError, AttributeError):
+        raise HTTPException(400, "Malformed webhook") from None
+    conn = await get_conn()
+    try:
+        order_id = await conn.fetchval("SELECT order_id FROM payment_orders WHERE provider_order_id=$1", provider_order_id)
+    finally:
+        await conn.close()
+    if not order_id:
+        raise HTTPException(404, "Payment order not found")
+    # The raw-body webhook signature authenticates this callback. Reuse the
+    # checkout verifier, which also fetches and checks captured amount/currency.
+    signature = hmac.new(os.environ["RAZORPAY_KEY_SECRET"].encode(), f"{provider_order_id}|{payment_id}".encode(), hashlib.sha256).hexdigest()
+    try:
+        order = await payment_service.confirm_order(order_id, {
+            "razorpay_order_id": provider_order_id, "razorpay_payment_id": payment_id,
+            "razorpay_signature": signature,
+        })
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"received": True, "status": order.status}
+
+@app.post("/api/payments/{order_id}/settle")
+async def settle_payment(order_id: str):
+    from services.payments.settlement import settle_order
+    try:
+        order = await settle_order(order_id)
+        return {"success": True, "order": order.model_dump()}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+@app.post("/api/payments/create")
+async def create_payment(
+    request: CreatePaymentRequest
+):
+    try:
+        order = await payment_service.create_order(
+            request
+        )
+
+        return {
+            "success": True,
+            "order": order.model_dump(),
+        }
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+
+
+@app.get("/api/payments/{order_id}")
+async def get_payment(
+    order_id: str
+):
+    order = await payment_service.get_order(order_id)
+
+    if not order:
+        raise HTTPException(
+            status_code=404,
+            detail="Payment order not found"
+        )
+
+    return {
+        "success": True,
+        "order": order.model_dump(),
+    }
+
+
+@app.post("/api/payments/{order_id}/confirm")
+async def confirm_payment(
+    order_id: str,
+    confirmation: ConfirmPaymentRequest | None = None,
+):
+    try:
+        order = await payment_service.confirm_order(
+            order_id,
+            confirmation.model_dump() if confirmation else None,
+        )
+
+        return {
+            "success": True,
+            "order": order.model_dump(),
+        }
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )

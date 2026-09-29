@@ -72,10 +72,41 @@ async def setup_tables():
         await conn.execute(create_assets)
         await conn.execute(create_index)
         await conn.execute(create_reviews)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS payment_orders (
+                order_id TEXT PRIMARY KEY,
+                token_id INT NOT NULL CHECK (token_id > 0),
+                buyer_address TEXT NOT NULL,
+                amount_usdc BIGINT NOT NULL CHECK (amount_usdc > 0),
+                payment_method TEXT NOT NULL CHECK (payment_method IN ('mock', 'upi', 'card', 'web3')),
+                status TEXT NOT NULL CHECK (status IN (
+                    'CREATED', 'PENDING', 'PROVIDER_CONFIRMED', 'SETTLEMENT_PENDING',
+                    'SETTLED', 'ENTITLEMENT_GRANTED', 'FAILED'
+                )),
+                provider_order_id TEXT UNIQUE,
+                provider_payment_id TEXT UNIQUE,
+                settlement_tx_hash TEXT UNIQUE,
+                error TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
 
         await conn.execute("""
             CREATE INDEX IF NOT EXISTS assets_domain_idx
             ON knowledge_assets(domain)
+        """)
+
+        await conn.execute("""
+            ALTER TABLE payment_orders
+                ADD COLUMN IF NOT EXISTS fiat_currency TEXT,
+                ADD COLUMN IF NOT EXISTS fiat_amount BIGINT,
+                ADD COLUMN IF NOT EXISTS exchange_rate TEXT,
+                ADD COLUMN IF NOT EXISTS checkout_key TEXT,
+                ADD COLUMN IF NOT EXISTS listing_id BIGINT,
+                ADD COLUMN IF NOT EXISTS marketplace_address TEXT,
+                ADD COLUMN IF NOT EXISTS chain_id BIGINT,
+                ADD COLUMN IF NOT EXISTS settlement_raw_tx TEXT
         """)
 
         await conn.execute("""

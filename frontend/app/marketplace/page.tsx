@@ -1,11 +1,8 @@
 "use client";
+import { useState } from "react";
 
 import { useKnowledgeAsset, useTotalMinted } from "@/lib/blockchain/useKnowledgeAssets";
 import AssetCard from "@/components/marketplace/AssetCard";
-console.log("========== ASSET CARD DEBUG ==========");
-console.log("AssetCard value:", AssetCard);
-console.log("AssetCard typeof:", typeof AssetCard);
-console.log("AssetCard is function:", typeof AssetCard === "function");
 type KnowledgeAssetData = {
   ipfsCID: string;
   metadataCID: string;
@@ -20,8 +17,10 @@ type KnowledgeAssetData = {
 
 function AssetItem({
   tokenId,
+  saleMode,
 }: {
   tokenId: bigint;
+  saleMode: string;
 }) {
   const {
     data: asset,
@@ -64,6 +63,7 @@ function AssetItem({
 
   return (
   <AssetCard
+    saleMode={saleMode}
     tokenId={tokenId}
     asset={{
       ipfsCID: assetData.ipfsCID,
@@ -79,7 +79,8 @@ function AssetItem({
 );
 }
 
-export default function MarketplacePage() {
+export default function MarketplacePage({ searchParams }: { searchParams?: { mode?: string } }) {
+  const [saleMode, setSaleMode] = useState(searchParams?.mode === "auction" ? "auction" : "all");
   const {
     data: totalMinted,
     isLoading,
@@ -126,7 +127,11 @@ export default function MarketplacePage() {
           </p>
         </div>
       ) : (
-        <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-10">
+          <div className="mb-6 flex gap-3" aria-label="Sale mode">
+            {[["all", "All"], ["fixed", "Fixed Price"], ["auction", "Auctions"]].map(([value, label]) => <button key={value} aria-pressed={saleMode === value} onClick={() => setSaleMode(value)} className={`rounded border px-4 py-2 ${saleMode === value ? "bg-black text-white" : ""}`}>{label}</button>)}
+          </div>
+          <div className="peer grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {Array.from(
             { length: total },
             (_, index) => {
@@ -134,12 +139,15 @@ export default function MarketplacePage() {
 
               return (
                 <AssetItem
+                  saleMode={saleMode}
                   key={tokenId.toString()}
                   tokenId={tokenId}
                 />
               );
             }
           )}
+          </div>
+          <p className="hidden rounded border p-6 peer-empty:block">No assets match this sale mode.</p>
         </div>
       )}
 

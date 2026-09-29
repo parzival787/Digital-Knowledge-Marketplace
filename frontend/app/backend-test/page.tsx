@@ -34,7 +34,7 @@ export default function BackendTestPage() {
         {status}
       </p>
 
-      {data && (
+      {data !== null && (
         <pre className="mt-6 overflow-auto rounded-lg border p-4 text-sm">
           {JSON.stringify(data, null, 2)}
         </pre>
