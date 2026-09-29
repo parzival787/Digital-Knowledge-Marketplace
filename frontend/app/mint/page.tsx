@@ -1,650 +1,78 @@
 "use client";
-
-import { useState } from "react";
-import {
-  useAccount,
-  useWriteContract,
-  useWaitForTransactionReceipt,
-} from "wagmi";
-
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useAccount, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
+import { parseEventLogs, parseUnits } from "viem";
+import { polygonAmoy } from "viem/chains";
 import { knowledgeAssetContract } from "@/lib/blockchain/contracts";
+import { analyzeAsset, uploadAssetToIPFS, AnalyzeResponse, UploadIPFSResponse } from "@/lib/api/backend";
+import { api } from "@/lib/api/client";
+import { AccountGate } from "@/providers/AuthProvider";
 
-import {
-  analyzeAsset,
-  uploadAssetToIPFS,
-  type AnalyzeResponse,
-} from "@/lib/api/backend";
-
-export default function MintPage() {
-  const { address, isConnected } = useAccount();
-
-  const [ipfsCID, setIpfsCID] = useState("");
-  const [metadataCID, setMetadataCID] = useState("");
-  const [price, setPrice] = useState("");
+function MintFlow({ resume }: { resume?: string }) {
+  const { address, chainId } = useAccount();
+  const client = usePublicClient({ chainId: polygonAmoy.id });
+  const { switchChainAsync } = useSwitchChain();
+  const { writeContractAsync } = useWriteContract();
+  const [file, setFile] = useState<File | null>(null);
+  const [analysis, setAnalysis] = useState<AnalyzeResponse | null>(null);
+  const [upload, setUpload] = useState<UploadIPFSResponse | null>(null);
+  const [price, setPrice] = useState("5");
   const [license, setLicense] = useState("0");
-  const [qualityScore, setQualityScore] = useState("");
-
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-
-  const [analysis, setAnalysis] =
-    useState<AnalyzeResponse | null>(null);
-
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisError, setAnalysisError] = useState("");
-
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadError, setUploadError] = useState("");
-
-  const {
-    data: hash,
-    writeContractAsync,
-    isPending,
-    error,
-  } = useWriteContract();
-
-  const {
-    isLoading: isConfirming,
-    isSuccess: isConfirmed,
-  } = useWaitForTransactionReceipt({
-    hash,
-  });
-
-  // =========================================================
-  // AI ANALYSIS
-  // =========================================================
-
-  async function handleAnalyze() {
-    if (!selectedFile) {
-      alert("Please select a file first.");
-      return;
-    }
-
-    setIsAnalyzing(true);
-    setAnalysisError("");
-    setAnalysis(null);
-
-    // Clear previous upload
-    setIpfsCID("");
-    setMetadataCID("");
-    setUploadError("");
-
-    try {
-      const result = await analyzeAsset(selectedFile);
-
-      console.log("ANALYSIS RESULT:", result);
-
-      setAnalysis(result);
-
-      const quality = Math.round(
-        (result.metadata.quality_score ?? 0) * 100
-      );
-
-      setQualityScore(quality.toString());
-
-      if (
-        result.metadata.recommended_price_usdc !==
-        undefined
-      ) {
-        setPrice(
-          result.metadata.recommended_price_usdc.toString()
-        );
-      }
-    } catch (err) {
-      console.error("Analysis failed:", err);
-
-      setAnalysisError(
-        err instanceof Error
-          ? err.message
-          : "Failed to analyze file."
-      );
-    } finally {
-      setIsAnalyzing(false);
-    }
+  const [token, setToken] = useState<string | null>(null);
+  const [tx, setTx] = useState<string | null>(null);
+  const [linked, setLinked] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!resume) return;
+    let active = true;
+    setBusy(true);
+    api<{assets: {vector_id: string; file_cid: string; metadata_cid: string; title: string; quality: number; price_usdc: number; token_id: number | null}[]}>("/api/account/dashboard").then(data => {
+      if (!active) return;
+      const saved = data.assets.find(a => a.vector_id === resume);
+      if (!saved) throw new Error("Upload not found in your account.");
+      setUpload(saved); setPrice(String(saved.price_usdc));
+      setAnalysis({success: true, metadata: {title: saved.title, quality_score: saved.quality}});
+      if (saved.token_id) { setToken(String(saved.token_id)); setLinked(true); }
+      setStatus(saved.token_id ? "This upload is already minted and linked." : "Upload restored. If you already minted it, use Dashboard to link the existing token instead of minting again.");
+    }).catch(err => { if (active) setError(err instanceof Error ? err.message : "Could not restore upload."); }).finally(() => { if (active) setBusy(false); });
+    return () => { active = false; };
+  }, [resume]);
+  async function run(action: () => Promise<void>) {
+    setBusy(true); setError("");
+    try { await action(); } catch (err) { setError(err instanceof Error ? err.message : "Operation failed. Retry."); }
+    finally { setBusy(false); }
   }
-
-  // =========================================================
-  // IPFS UPLOAD
-  // =========================================================
-
-  async function handleUploadIPFS() {
-    if (!selectedFile) {
-      alert("Please select a file first.");
-      return;
-    }
-
-    if (!analysis) {
-      alert("Please analyze the dataset first.");
-      return;
-    }
-
-    setIsUploading(true);
-    setUploadError("");
-
-    try {
-      const metadata = {
-        title: analysis.metadata.title ?? "",
-        summary: analysis.metadata.summary ?? "",
-        domain: analysis.metadata.domain ?? "other",
-        tags: analysis.metadata.tags ?? [],
-        quality_score:
-          analysis.metadata.quality_score ?? 0,
-        recommended_price_usdc:
-          analysis.metadata.recommended_price_usdc ?? 5,
-      };
-
-      console.log("UPLOADING METADATA:", metadata);
-
-      const result = await uploadAssetToIPFS(
-        selectedFile,
-        metadata
-      );
-
-      console.log("IPFS UPLOAD RESULT:", result);
-
-      setIpfsCID(result.file_cid);
-      setMetadataCID(result.metadata_cid);
-    } catch (err) {
-      console.error("IPFS upload failed:", err);
-
-      setUploadError(
-        err instanceof Error
-          ? err.message
-          : "Failed to upload asset to IPFS."
-      );
-    } finally {
-      setIsUploading(false);
-    }
+  async function link(id: string) {
+    if (!upload) return;
+    await api(`/api/assets/${upload.vector_id}/link-token`, { method: "POST", body: JSON.stringify({ token_id: Number(id) }) });
+    setLinked(true); setStatus("Asset minted and linked to your account. You can now list it in the marketplace.");
   }
-
-  // =========================================================
-  // BLOCKCHAIN MINT
-  // =========================================================
-
-  async function mintAsset() {
-    if (!isConnected) {
-      alert("Please connect your wallet first.");
-      return;
-    }
-
-    if (!address) {
-      alert("Wallet address not available.");
-      return;
-    }
-
-    if (!analysis) {
-      alert("Please analyze the dataset first.");
-      return;
-    }
-
-    if (!ipfsCID || !metadataCID) {
-      alert("Please upload the dataset to IPFS first.");
-      return;
-    }
-
-    const priceNumber = Number(price);
-
-    if (
-      !Number.isFinite(priceNumber) ||
-      priceNumber < 1 ||
-      priceNumber > 100
-    ) {
-      alert("Price must be between 1 and 100 USDC");
-      return;
-    }
-
-    const qualityNumber = Number(qualityScore);
-
-    if (
-      !Number.isInteger(qualityNumber) ||
-      qualityNumber < 0 ||
-      qualityNumber > 100
-    ) {
-      alert("Quality score must be between 0 and 100");
-      return;
-    }
-
-    const licenseNumber = Number(license);
-
-    if (
-      !Number.isInteger(licenseNumber) ||
-      licenseNumber < 0 ||
-      licenseNumber > 2
-    ) {
-      alert("Invalid license");
-      return;
-    }
-
-    const priceUSDC = BigInt(
-      Math.round(priceNumber * 1_000_000)
-    );
-
-    const mintArgs = [
-      ipfsCID.trim(),
-      metadataCID.trim(),
-      priceUSDC,
-      BigInt(licenseNumber),
-      BigInt(qualityNumber),
-    ] as const;
-
-    console.log("MINT ARGUMENTS:", mintArgs);
-
-    try {
-      const txHash = await writeContractAsync({
-        ...knowledgeAssetContract,
-        functionName: "mint",
-        args: mintArgs,
-      });
-
-      console.log("Transaction submitted:", txHash);
-    } catch (err) {
-      console.error("Mint transaction error:", err);
-    }
+  async function mint() {
+    if (!address || !client || !upload || !analysis || tx || linked) return;
+    if (chainId !== polygonAmoy.id) await switchChainAsync({ chainId: polygonAmoy.id });
+    setStatus("Confirm mint in your wallet…");
+    const hash = await writeContractAsync({ ...knowledgeAssetContract, functionName: "mint", account: address, chainId: polygonAmoy.id,
+      args: [upload.file_cid, upload.metadata_cid, parseUnits(price, 6), BigInt(license), BigInt(Math.round((analysis.metadata.quality_score || 0) * 100))] });
+    setTx(hash); setStatus("Waiting for mint confirmation…");
+    await finishMint(hash);
   }
-
-  return (
-    <main className="mx-auto max-w-3xl px-6 py-12">
-
-      <h1 className="text-3xl font-bold">
-        Create Knowledge Asset
-      </h1>
-
-      <p className="mt-2 text-muted-foreground">
-        Analyze, upload, and mint your knowledge asset.
-      </p>
-
-      <div className="mt-8 space-y-6">
-
-        {/* ================================================= */}
-        {/* 1. SELECT FILE */}
-        {/* ================================================= */}
-
-        <div className="rounded-xl border p-6">
-
-          <h2 className="text-xl font-bold">
-            1. Select Knowledge Dataset
-          </h2>
-
-          <p className="mt-2 text-sm text-muted-foreground">
-            Upload a PDF, CSV, TXT, or supported knowledge
-            document for AI analysis.
-          </p>
-
-          <input
-            type="file"
-            onChange={(e) => {
-              const file =
-                e.target.files?.[0] ?? null;
-
-              setSelectedFile(file);
-              setAnalysis(null);
-              setAnalysisError("");
-              setUploadError("");
-              setIpfsCID("");
-              setMetadataCID("");
-            }}
-            className="mt-4 w-full rounded-md border px-3 py-2"
-          />
-
-          {selectedFile && (
-            <p className="mt-3 text-sm">
-              <span className="font-medium">
-                Selected:
-              </span>{" "}
-              {selectedFile.name}
-            </p>
-          )}
-
-          <button
-            type="button"
-            onClick={handleAnalyze}
-            disabled={
-              !selectedFile ||
-              isAnalyzing
-            }
-            className="mt-4 rounded-md border px-5 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isAnalyzing
-              ? "Analyzing with AI..."
-              : "Analyze Dataset"}
-          </button>
-
-          {analysisError && (
-            <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-600">
-              <p className="font-medium">
-                Analysis failed
-              </p>
-
-              <p className="mt-1">
-                {analysisError}
-              </p>
-            </div>
-          )}
-
-        </div>
-
-        {/* ================================================= */}
-        {/* 2. AI ANALYSIS */}
-        {/* ================================================= */}
-
-        {analysis && (
-          <div className="rounded-xl border p-6">
-
-            <h2 className="text-xl font-bold">
-              2. AI Analysis
-            </h2>
-
-            <div className="mt-5 space-y-4 text-sm">
-
-              <div>
-                <p className="font-medium">Title</p>
-                <p className="mt-1">
-                  {analysis.metadata.title ??
-                    "Not available"}
-                </p>
-              </div>
-
-              <div>
-                <p className="font-medium">Summary</p>
-                <p className="mt-1">
-                  {analysis.metadata.summary ??
-                    "Not available"}
-                </p>
-              </div>
-
-              <div>
-                <p className="font-medium">Domain</p>
-                <p className="mt-1">
-                  {analysis.metadata.domain ??
-                    "Not available"}
-                </p>
-              </div>
-
-              <div>
-                <p className="font-medium">Tags</p>
-                <p className="mt-1">
-                  {analysis.metadata.tags?.join(", ") ||
-                    "No tags"}
-                </p>
-              </div>
-
-              <div>
-                <p className="font-medium">
-                  Quality Score
-                </p>
-
-                <p className="mt-1">
-                  {Math.round(
-                    (analysis.metadata.quality_score ??
-                      0) * 100
-                  )}
-                  /100
-                </p>
-              </div>
-
-              <div>
-                <p className="font-medium">
-                  Recommended Price
-                </p>
-
-                <p className="mt-1">
-                  {analysis.metadata
-                    .recommended_price_usdc ??
-                    "Not available"}{" "}
-                  USDC
-                </p>
-              </div>
-
-            </div>
-
-          </div>
-        )}
-
-        {/* ================================================= */}
-        {/* 3. IPFS UPLOAD */}
-        {/* ================================================= */}
-
-        {analysis && (
-          <div className="rounded-xl border p-6">
-
-            <h2 className="text-xl font-bold">
-              3. Upload to IPFS
-            </h2>
-
-            <p className="mt-2 text-sm text-muted-foreground">
-              Store the dataset and its metadata using the
-              existing backend IPFS pipeline.
-            </p>
-
-            <button
-              type="button"
-              onClick={handleUploadIPFS}
-              disabled={isUploading}
-              className="mt-4 rounded-md border px-5 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isUploading
-                ? "Uploading to IPFS..."
-                : "Upload to IPFS"}
-            </button>
-
-            {uploadError && (
-              <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-600">
-                <p className="font-medium">
-                  IPFS upload failed
-                </p>
-
-                <p className="mt-1">
-                  {uploadError}
-                </p>
-              </div>
-            )}
-
-            {ipfsCID && metadataCID && (
-              <div className="mt-5 rounded-md border border-green-200 bg-green-50 p-4 text-sm">
-
-                <p className="font-medium text-green-700">
-                  Upload successful
-                </p>
-
-                <div className="mt-3 space-y-3">
-
-                  <div>
-                    <p className="font-medium">
-                      File CID
-                    </p>
-
-                    <p className="mt-1 break-all">
-                      {ipfsCID}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="font-medium">
-                      Metadata CID
-                    </p>
-
-                    <p className="mt-1 break-all">
-                      {metadataCID}
-                    </p>
-                  </div>
-
-                </div>
-
-              </div>
-            )}
-
-          </div>
-        )}
-
-        {/* ================================================= */}
-        {/* 4. ASSET SETTINGS */}
-        {/* ================================================= */}
-
-        {analysis && (
-          <div className="rounded-xl border p-6">
-
-            <h2 className="text-xl font-bold">
-              4. Asset Settings
-            </h2>
-
-            {/* Price */}
-
-            <div className="mt-5">
-
-              <label className="text-sm font-medium">
-                Price (USDC)
-              </label>
-
-              <input
-                type="number"
-                min="1"
-                max="100"
-                step="0.01"
-                value={price}
-                onChange={(e) =>
-                  setPrice(e.target.value)
-                }
-                className="mt-2 w-full rounded-md border px-3 py-2"
-              />
-
-              <p className="mt-1 text-xs text-muted-foreground">
-                Recommended price is generated by AI.
-                You can adjust it between 1 and 100 USDC.
-              </p>
-
-            </div>
-
-            {/* License */}
-
-            <div className="mt-5">
-
-              <label className="text-sm font-medium">
-                License
-              </label>
-
-              <select
-                value={license}
-                onChange={(e) =>
-                  setLicense(e.target.value)
-                }
-                className="mt-2 w-full rounded-md border px-3 py-2"
-              >
-                <option value="0">
-                  Open Access
-                </option>
-
-                <option value="1">
-                  Single Use
-                </option>
-
-                <option value="2">
-                  Commercial
-                </option>
-              </select>
-
-            </div>
-
-            {/* Quality */}
-
-            <div className="mt-5">
-
-              <label className="text-sm font-medium">
-                Quality Score
-              </label>
-
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={qualityScore}
-                onChange={(e) =>
-                  setQualityScore(e.target.value)
-                }
-                className="mt-2 w-full rounded-md border px-3 py-2"
-              />
-
-            </div>
-
-          </div>
-        )}
-
-        {/* ================================================= */}
-        {/* 5. MINT */}
-        {/* ================================================= */}
-
-        {analysis && (
-          <div>
-
-            <button
-              type="button"
-              onClick={mintAsset}
-              disabled={
-                isPending ||
-                isConfirming ||
-                !ipfsCID ||
-                !metadataCID
-              }
-              className="w-full rounded-md bg-primary px-6 py-3 font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isPending
-                ? "Confirm transaction..."
-                : isConfirming
-                ? "Minting..."
-                : "Mint Knowledge Asset"}
-            </button>
-
-            {!ipfsCID || !metadataCID ? (
-              <p className="mt-2 text-center text-xs text-muted-foreground">
-                Upload the asset to IPFS before minting.
-              </p>
-            ) : null}
-
-          </div>
-        )}
-
-        {/* ================================================= */}
-        {/* TRANSACTION */}
-        {/* ================================================= */}
-
-        {hash && (
-          <div className="rounded-md border p-4 text-sm">
-
-            <p className="font-medium">
-              Transaction submitted
-            </p>
-
-            <p className="mt-1 break-all text-muted-foreground">
-              {hash}
-            </p>
-
-          </div>
-        )}
-
-        {isConfirmed && (
-          <div className="rounded-md border border-green-200 bg-green-50 p-4 text-sm text-green-700">
-
-            <p className="font-medium">
-              Knowledge Asset minted successfully!
-            </p>
-
-          </div>
-        )}
-
-        {error && (
-          <div className="rounded-md border p-4 text-sm text-red-500">
-
-            <p className="font-medium">
-              Transaction failed
-            </p>
-
-            <p className="mt-1">
-              {error.message}
-            </p>
-
-          </div>
-        )}
-
-      </div>
-
-    </main>
-  );
+  async function finishMint(hash: string) {
+    if (!client) return;
+    const receipt = await client.waitForTransactionReceipt({ hash: hash as `0x${string}` });
+    if (receipt.status !== "success") { setTx(null); throw new Error("Mint reverted. You can retry."); }
+    const events = parseEventLogs({ abi: [{ type: "event", name: "Transfer", inputs: [{name:"from",type:"address",indexed:true},{name:"to",type:"address",indexed:true},{name:"tokenId",type:"uint256",indexed:true}] }] as const, eventName: "Transfer", logs: receipt.logs.filter(log => log.address.toLowerCase() === knowledgeAssetContract.address.toLowerCase()) });
+    const event = events.find(e => e.args.from === "0x0000000000000000000000000000000000000000" && e.args.to.toLowerCase() === address?.toLowerCase());
+    if (!event) throw new Error("Mint receipt could not be linked. Use your upload in Dashboard to retry linking.");
+    const id = event.args.tokenId.toString(); setToken(id); setStatus("Mint confirmed. Linking your upload…"); await link(id);
+  }
+  return <div className="mt-8 space-y-6">
+    <section className="space-y-4 rounded-xl border p-6"><h2 className="text-xl font-semibold">1. Analyze your document</h2><label className="block">Document (up to 20 MB)<input type="file" accept=".pdf,.txt,.csv" disabled={busy || !!upload} className="mt-2 block w-full rounded border p-2" onChange={e => { setFile(e.target.files?.[0] || null); setAnalysis(null); }} /></label><button disabled={!file || busy || !!upload} className="rounded border px-4 py-2 disabled:opacity-50" onClick={() => run(async () => { if (!file) return; setStatus("Analyzing document…"); const result = await analyzeAsset(file); setAnalysis(result); setPrice(String(result.metadata.recommended_price_usdc || 5)); setStatus("Analysis ready. Review settings before uploading."); })}>Analyze document</button></section>
+    {analysis && <section className="space-y-4 rounded-xl border p-6"><h2 className="text-xl font-semibold">2. Review and upload</h2><h3 className="font-semibold">{analysis.metadata.title}</h3><p>{analysis.metadata.summary}</p><p>{analysis.metadata.domain} · Quality {Math.round((analysis.metadata.quality_score || 0) * 100)}/100</p><p>{analysis.metadata.tags?.join(", ")}</p><label className="block">Price (whole USDC)<input type="number" min="1" max="100" step="1" disabled={!!upload || busy} value={price} onChange={e => setPrice(e.target.value)} className="mt-2 w-full rounded border p-2" /></label><label className="block">License<select value={license} disabled={!!tx || busy} onChange={e => setLicense(e.target.value)} className="mt-2 w-full rounded border p-2"><option value="0">Open Access</option><option value="1">Single Use</option><option value="2">Commercial</option></select></label><p className="text-sm text-amber-800">Uploads go to public IPFS. Do not upload private or confidential files; anyone with the file address can retrieve them.</p><button disabled={busy || !!upload} className="rounded border px-4 py-2 disabled:opacity-50" onClick={() => run(async () => { if (!file) return; if (!Number.isInteger(Number(price)) || Number(price) < 1 || Number(price) > 100) throw new Error("Choose a whole USDC price from 1 to 100."); setStatus("Uploading file and metadata…"); setUpload(await uploadAssetToIPFS(file, { ...analysis.metadata, recommended_price_usdc: Number(price) })); setStatus("Upload saved to your account. Ready to mint."); })}>Upload to public IPFS</button></section>}
+    {upload && <section className="space-y-4 rounded-xl border p-6"><h2 className="text-xl font-semibold">3. Mint and link</h2><p className="break-all">File: {upload.file_cid}</p><p>Your upload is saved in Dashboard even if you leave this page.</p>{!tx && !linked && <button disabled={busy} onClick={() => run(mint)} className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50">Mint on Polygon Amoy</button>}{tx && <a className="block underline" href={`https://amoy.polygonscan.com/tx/${tx}`} target="_blank" rel="noreferrer">View mint transaction</a>}{tx && !linked && <button disabled={busy} onClick={() => run(() => token ? link(token) : finishMint(tx))} className="rounded border px-4 py-2">Check mint / Retry linking</button>}{linked && <Link className="block underline" href={`/marketplace#asset-${token}`}>List your asset for sale or auction</Link>}</section>}
+    {status && <p role="status">{status}</p>}{error && <p className="break-words text-red-700" role="alert">{error}</p>}
+  </div>;
 }
+export default function MintPage({ searchParams }: { searchParams?: { upload?: string } }) { return <main className="mx-auto max-w-3xl px-6 py-12"><h1 className="mb-6 text-3xl font-bold">Create knowledge asset</h1><AccountGate wallet><MintFlow resume={searchParams?.upload} /></AccountGate></main>; }

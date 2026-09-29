@@ -1,5 +1,7 @@
 "use client";
 
+import { api as backendApi } from "@/lib/api/client";
+import { useAuth } from "@/providers/AuthProvider";
 import Script from "next/script";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -17,7 +19,7 @@ type CheckoutOptions = {
 };
 declare global { interface Window { Razorpay?: new (options: CheckoutOptions) => { open(): void }; } }
 
-const api = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+
 const labels: Record<string, string> = {
   CREATED: "Preparing payment", PENDING: "Awaiting payment", PROVIDER_CONFIRMED: "Payment verified — awaiting blockchain settlement",
   SETTLEMENT_PENDING: "Blockchain settlement pending", SETTLED: "Settled — checking entitlement",
@@ -25,16 +27,16 @@ const labels: Record<string, string> = {
 };
 
 async function request(path: string, body?: object): Promise<Order> {
-  const response = await fetch(`${api}/api/payments/${path}`, {
-    method: body ? "POST" : "GET", headers: { "Content-Type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined, cache: "no-store",
+  const result = await backendApi<{order: Order}>(`/api/payments/${path}`, {
+    method: body ? "POST" : "GET", body: body ? JSON.stringify(body) : undefined,
   });
-  const result = await response.json();
-  if (!response.ok) throw new Error(typeof result.detail === "string" ? result.detail : "Payment service is unavailable.");
   return result.order;
 }
 
 export default function Web2Checkout({ tokenId, buyer, canStart }: { tokenId: bigint; buyer: `0x${string}`; canStart: boolean }) {
+  const { user } = useAuth();
+  const [capability, setCapability] = useState<{fiat_configured: boolean; fiat_message: string} | null>(null);
+  useEffect(() => { backendApi<{fiat_configured: boolean; fiat_message: string}>("/api/capabilities").then(setCapability).catch(() => setError("Could not check payment availability.")); }, []);
   const [order, setOrder] = useState<Order | null>(null);
   const [method, setMethod] = useState("upi");
   const [ready, setReady] = useState(false);
@@ -42,17 +44,16 @@ export default function Web2Checkout({ tokenId, buyer, canStart }: { tokenId: bi
   const [error, setError] = useState("");
   const [restoring, setRestoring] = useState(true);
   const cache = useQueryClient();
-  const storageKey = `dkm-payment:${buyer.toLowerCase()}:${tokenId}`;
+
 
   useEffect(() => {
-    const saved = localStorage.getItem(storageKey);
     let current = true;
-    if (saved) request(encodeURIComponent(saved)).then(value => { if (current) { setOrder(value); setRestoring(false); } }).catch(() => {
-      if (current) setError("Could not restore your payment status. Retry before creating another payment.");
-    });
-    else setRestoring(false);
+    setRestoring(true); setOrder(null);
+    backendApi<{order: Order | null}>(`/api/assets/${tokenId}/payment`).then(value => {
+      if (current) { setOrder(value.order); setRestoring(false); }
+    }).catch(() => { if (current) setError("Could not restore your payment status. Retry before creating another payment."); });
     return () => { current = false; };
-  }, [storageKey]);
+  }, [tokenId, user?.id]);
 
   useEffect(() => {
     if (!order || ["FAILED", "ENTITLEMENT_GRANTED"].includes(order.status)) return;
@@ -75,7 +76,7 @@ export default function Web2Checkout({ tokenId, buyer, canStart }: { tokenId: bi
       const value = order?.status === "PENDING" ? order : await request("create", {
         token_id: Number(tokenId), buyer_address: buyer, payment_method: method,
       });
-      setOrder(value); localStorage.setItem(storageKey, value.order_id);
+      setOrder(value);
       if (value.status !== "PENDING" || !value.checkout_key || !value.provider_order_id || !value.fiat_amount || !value.fiat_currency) {
         throw new Error(value.error || "Checkout is unavailable for this order.");
       }
@@ -92,12 +93,14 @@ export default function Web2Checkout({ tokenId, buyer, canStart }: { tokenId: bi
   }
 
   async function refresh() {
-    const id = order?.order_id || localStorage.getItem(storageKey);
-    if (!id) return;
+
     setBusy(true); setError("");
     try {
-      const value = await request(id);
+      const saved = await backendApi<{order: Order | null}>(`/api/assets/${tokenId}/payment`);
+      const value = saved.order;
       setRestoring(false);
+      if (!value) { setOrder(null); return; }
+      const id = value.order_id;
       setOrder((["PROVIDER_CONFIRMED", "SETTLEMENT_PENDING", "SETTLED"].includes(value.status) || value.status === "FAILED" && !!value.provider_payment_id)
         ? await request(`${id}/settle`, {}) : value);
     } catch (err) { setError(err instanceof Error ? err.message : "Status unavailable."); }
@@ -106,13 +109,14 @@ export default function Web2Checkout({ tokenId, buyer, canStart }: { tokenId: bi
 
   if (!canStart && !order) return null;
   return <section className="mt-4 space-y-3 rounded border p-3" aria-label="UPI and card checkout">
-    <Script src="https://checkout.razorpay.com/v1/checkout.js" onReady={() => setReady(true)} onError={() => setError("Unable to load checkout. Check your connection.")} />
+    {capability?.fiat_configured && <Script src="https://checkout.razorpay.com/v1/checkout.js" onReady={() => setReady(true)} onError={() => setError("Unable to load checkout. Check your connection.")} />}
     <h3 className="font-semibold">UPI / Card — Test mode</h3>
+    <p>{capability?.fiat_message || "Checking payment availability…"}</p>
     <label className="block">Payment method <select className="rounded border p-2" value={method} onChange={e => setMethod(e.target.value)} disabled={!!order}>
       <option value="upi">UPI</option><option value="card">Card</option>
     </select></label>
     {order?.fiat_amount && <p>Quote: {(order.fiat_amount / 100).toFixed(2)} {order.fiat_currency} for {order.amount_usdc} USDC. Test rate: ₹{order.exchange_rate} per USDC.</p>}
-    {canStart && (!order || order.status === "PENDING" || order.status === "FAILED" && !order.provider_payment_id) && <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy || !ready || restoring} onClick={checkout}>{order?.status === "PENDING" ? "Resume checkout" : "Pay with UPI / Card"}</button>}
+    {canStart && (!order || order.status === "PENDING" || order.status === "FAILED" && !order.provider_payment_id) && <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy || !ready || restoring || !capability?.fiat_configured} onClick={checkout}>{order?.status === "PENDING" ? "Resume checkout" : "Pay with UPI / Card"}</button>}
     {order && <>
       <p role="status">{labels[order.status] || order.status}</p>
       <p className="break-all text-xs">Order: {order.order_id}</p>

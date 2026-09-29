@@ -1,5 +1,7 @@
 "use client";
 
+import { useVerifiedWallet } from "@/providers/AuthProvider";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAccount, usePublicClient, useReadContract, useSwitchChain, useWriteContract } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
@@ -12,6 +14,7 @@ type Auction = readonly [bigint, bigint, bigint, `0x${string}`, `0x${string}`, b
 export default function AuctionPanel({ tokenId, auctionId, canCreate, price }: {
   tokenId: bigint; auctionId: bigint; canCreate: boolean; price: bigint;
 }) {
+  const verified = useVerifiedWallet();
   const { address, chainId } = useAccount();
   const client = usePublicClient({ chainId: polygonAmoy.id });
   const { switchChainAsync } = useSwitchChain();
@@ -46,6 +49,7 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price }: {
 
   async function transact(action: "bid" | "create" | "end" | "refund") {
     setError("");
+    if (!verified) { setError("Log in and verify your connected wallet in Account first."); return; }
     if (!address || !client) { setError("Connect your wallet first."); return; }
     setBusy(true);
     try {
@@ -87,10 +91,11 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price }: {
 
   if (!resolvedId && !canCreate && !refund) return null;
   return <section className="mt-5 space-y-3 rounded-lg border p-4" aria-label="Auction">
-    <h3 className="font-semibold">Auction</h3>
+    <h3 className="font-semibold">Auction{resolvedId > 0n ? ` #${resolvedId}` : ""}</h3>
     {isError && <p role="alert">Unable to load auction state.</p>}
     {!!resolvedId && !auction && !isError && <p>Loading auction…</p>}
     {auction && <>
+      <Link className="block underline" href={`/marketplace#asset-${auction[0]}`}>View asset #{auction[0].toString()}</Link>
       <p>Starting price: {formatUnits(auction[1], 6)} USDC</p>
       <p>{auction[2] ? `Highest bid: ${formatUnits(auction[2], 6)} USDC` : "No bids yet"}</p>
       {auction[2] > 0n && <p className="break-all">{auction[6] ? "Winner" : "Highest bidder"}: {auction[3]} {winner && "(you)"}</p>}

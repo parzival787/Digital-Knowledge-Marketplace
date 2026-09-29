@@ -107,3 +107,18 @@ From frontend: `node_modules\.bin\next.cmd build`
 References: [Razorpay](https://razorpay.com/docs/server-integration/python/test-app/),
 [LI.FI destination calls](https://docs.li.fi/api-reference/perform-multiple-contract-calls-across-blockchains-beta),
 [LI.FI testnet limitation](https://docs.li.fi/sdk/testing-integration).
+
+
+## Account and feature coverage continuation
+
+See FEATURE_COVERAGE.md for the complete API-to-page map and security boundaries.
+Added username signup/login/logout, hashed database sessions, signed wallet binding,
+account-scoped uploads/orders, search, dashboard, account and service-status pages.
+Minting now uses multipart metadata and the real stored vector ID, verifies the mint
+receipt and securely links content/creator/price. Dashboard supports upload recovery.
+Checkout resumes from server state across browsers. Dedicated auctions page includes
+completed auctions; sellers can cancel fixed listings. Shared navigation works on
+small screens. Existing unowned rows require a reviewed migration, never auto-claim.
+These changes supersede the earlier notes about missing search/dashboard/upload
+binding and historical auction visibility. Live fiat, bridge and encrypted storage
+blockers remain. Auth tests plus payments: 14 pass; frontend build passes.

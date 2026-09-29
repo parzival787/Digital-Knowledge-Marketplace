@@ -108,6 +108,8 @@ async def setup_tables():
                 ADD COLUMN IF NOT EXISTS chain_id BIGINT,
                 ADD COLUMN IF NOT EXISTS settlement_raw_tx TEXT
         """)
+        await conn.execute("ALTER TABLE payment_orders ADD COLUMN IF NOT EXISTS user_id BIGINT")
+        await conn.execute("ALTER TABLE knowledge_assets ADD COLUMN IF NOT EXISTS user_id BIGINT")
 
         await conn.execute("""
             CREATE INDEX IF NOT EXISTS assets_quality_idx
@@ -137,6 +139,7 @@ async def insert_embedding(
     embedding: list[float],
     file_cid: str = "",
     metadata_cid: str = "",
+    user_id: int | None = None,
 ):
     conn = await get_conn()
 
@@ -155,10 +158,10 @@ async def insert_embedding(
                 quality,
                 price_usdc,
                 blake3_hash,
-                embedding
+                embedding, user_id
             )
             VALUES (
-                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10
+                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11
             )
             RETURNING id, vector_id;
             """,
@@ -172,6 +175,7 @@ async def insert_embedding(
             price_usdc,
             blake3_hash,
             np.array(embedding),
+            user_id,
         )
 
         return dict(row)
@@ -197,7 +201,7 @@ async def semantic_search(
             where_clauses.append(f"domain = ${len(params) + 1}")
             params.append(domain)
 
-        if max_price:
+        if max_price is not None:
             where_clauses.append(f"price_usdc <= ${len(params) + 1}")
             params.append(max_price)
 

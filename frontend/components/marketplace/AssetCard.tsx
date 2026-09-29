@@ -1,5 +1,8 @@
 "use client";
 
+import Link from "next/link";
+import { useVerifiedWallet } from "@/providers/AuthProvider";
+import { api } from "@/lib/api/client";
 import { useEffect, useState } from "react";
 
 import {
@@ -8,6 +11,7 @@ import {
   useReadContract,
   useSwitchChain,
   usePublicClient,
+  useWriteContract,
 } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import { polygonAmoy } from "viem/chains";
@@ -65,6 +69,12 @@ export default function AssetCard({
   asset: Asset;
   saleMode?: string;
 }) {
+  const verified = useVerifiedWallet();
+  const { writeContractAsync } = useWriteContract();
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState("");
+  const [access, setAccess] = useState<{access_granted: boolean; file_url: string | null; storage_notice: string} | null>(null);
+  const [accessError, setAccessError] = useState("");
   const [showDetails, setShowDetails] = useState(false);
 
   const [metadata, setMetadata] = useState<Record<string, unknown> | null>(null);
@@ -254,6 +264,7 @@ export default function AssetCard({
    */
 
   function handleApprove() {
+    if (!verified) { setListingError("Log in and verify your connected wallet in Account first."); return; }
     if (!connectedAddress) {
       setListingError(
         "Please connect your wallet first."
@@ -273,6 +284,7 @@ export default function AssetCard({
    */
 
   function handleList() {
+  if (!verified) { setListingError("Log in and verify your connected wallet in Account first."); return; }
   if (chainId !== polygonAmoy.id) {
     setListingError("Switch to Polygon Amoy before listing.");
     return;
@@ -361,6 +373,7 @@ export default function AssetCard({
    */
 
   async function handleBuy() {
+    if (!verified) { setBuyError("Log in and verify your connected wallet in Account first."); return; }
     setBuyError("");
 
     if (!connectedAddress) {
@@ -473,7 +486,8 @@ export default function AssetCard({
   if (saleMode === "fixed" && !isListed) return null;
 
   return (
-    <div className="rounded-xl border p-6 shadow-sm">
+    <div id={`asset-${tokenId}`} className="rounded-xl border p-6 shadow-sm">
+      {!verified && <p className="mb-4 text-sm"><Link href="/account" className="text-blue-700 underline">Log in and verify your wallet</Link> to create listings, bid or pay.</p>}
 
       {/* ======================================================
           HEADER
@@ -801,6 +815,19 @@ export default function AssetCard({
           BUY CONTROLS
       ====================================================== */}
 
+      {isOwner && !!isListed && <div className="mt-4 space-y-2"><button disabled={cancelling || !verified} className="rounded border p-2 disabled:opacity-50" onClick={async () => {
+        if (!verified || !connectedAddress || !publicClient || !listingId) return;
+        setCancelling(true); setCancelError("");
+        try {
+          if (chainId !== polygonAmoy.id) throw new Error("Switch to Polygon Amoy before cancelling.");
+          const hash = await writeContractAsync({ ...marketplaceContract, account: connectedAddress, chainId: polygonAmoy.id, functionName: "cancelListing", args: [listingId] });
+          const receipt = await publicClient.waitForTransactionReceipt({ hash });
+          if (receipt.status !== "success") throw new Error("Cancellation reverted.");
+          await cache.invalidateQueries();
+        } catch { setCancelError("Cancellation failed or was rejected. Check your network and retry."); }
+        finally { setCancelling(false); }
+      }}>{cancelling ? "Cancelling listing…" : "Cancel listing"}</button>{cancelError && <p role="alert" className="text-red-700">{cancelError}</p>}</div>}
+
       {!!isListed && !isOwner && (
         <div className="mt-6 space-y-3">
 
@@ -864,7 +891,8 @@ export default function AssetCard({
 
       {connectedAddress && chainId !== polygonAmoy.id && <button className="mt-4 rounded border p-2" onClick={() => switchChain({ chainId: polygonAmoy.id })}>Switch to Polygon Amoy</button>}
       {purchased === true && <p className="mt-4 text-green-700" role="status">Purchase entitlement verified on-chain.</p>}
-      {connectedAddress && !isOwner && <Web2Checkout key={connectedAddress} tokenId={tokenId} buyer={connectedAddress} canStart={!!isListed && !purchased && asset.active} />}
+      {verified && connectedAddress && !isOwner && <Web2Checkout key={connectedAddress} tokenId={tokenId} buyer={connectedAddress} canStart={!!isListed && !purchased && asset.active} />}
+      {verified && <section className="mt-4 space-y-2"><button className="rounded border p-2" onClick={async () => { setAccessError(""); try { setAccess(await api(`/api/assets/${tokenId}/access`)); } catch (err) { setAccessError(err instanceof Error ? err.message : "Access check failed."); } }}>Check my access</button>{access && <><p>{access.access_granted ? "Your license access is verified." : "No active purchase entitlement for your wallet."}</p>{access.file_url && <a className="block text-blue-700 underline" target="_blank" rel="noreferrer" href={access.file_url}>Open asset file</a>}<p className="text-xs text-slate-500">{access.storage_notice}</p></>}{accessError && <p role="alert">{accessError}</p>}</section>}
       <AuctionPanel tokenId={tokenId} auctionId={auctionId} price={asset.priceUSDC} canCreate={isOwner && !isListed && asset.active} />
 
       {/* ======================================================

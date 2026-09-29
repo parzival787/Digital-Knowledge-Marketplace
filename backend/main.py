@@ -1,5 +1,8 @@
 # backend/main.py - COMPLETE FINAL VERSION FOR PHASE 1
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Depends
+from pydantic import BaseModel, Field
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os, json, httpx, asyncio
 from dotenv import load_dotenv
@@ -13,7 +16,6 @@ from services.pgvector_client import (
     setup_tables,
     insert_embedding,
     get_asset_by_token_id,
-    update_token_id,
 )
 from services.quantum_hash import quantum_hash
 from services.quantum_search import quantum_enhanced_search
@@ -26,14 +28,35 @@ from services.blockchain import (
 )
 from services.payments.models import CreatePaymentRequest, ConfirmPaymentRequest
 from services.payments.service import payment_service
+from services.auth import router as auth_router, setup_auth, current_user, wallet_user, ORIGIN
+from services.pgvector_client import get_conn
 
 
 
 
 app = FastAPI(title="DKM API", version="1.0.0")
+app.include_router(auth_router)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request, exc):
+    # Never echo submitted passwords, signatures or uploaded metadata in errors.
+    return JSONResponse(status_code=422, content={"detail": [
+        {"loc": list(error["loc"]), "msg": error["msg"]} for error in exc.errors()
+    ]})
+
+
+@app.middleware("http")
+async def private_response_headers(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith(("/api/auth", "/api/account", "/api/payments", "/api/assets")):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[ORIGIN],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -43,6 +66,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     await setup_tables()
+    await setup_auth()
     if os.getenv("SETTLEMENT_ENABLED") == "true":
         from services.payments.settlement import settlement_worker
         app.state.settlement_task = asyncio.create_task(settlement_worker())
@@ -88,7 +112,7 @@ async def health():
         )
     except Exception as e:
         checks["ollama_running"] = False
-        checks["ollama_error"] = str(e)
+        checks["ollama_error"] = "Ollama is unavailable"
 
     checks["pinata"] = bool(
         os.environ.get("PINATA_JWT")
@@ -117,8 +141,8 @@ async def health():
     }
 
 @app.post("/api/analyze")
-async def analyze(file: UploadFile = File(...)):
-    data = await file.read()
+async def analyze(file: UploadFile = File(...), user=Depends(current_user)):
+    data = await read_upload(file)
     if len(data) < 100:
         raise HTTPException(422, "File too small or empty")
 
@@ -139,11 +163,24 @@ async def analyze(file: UploadFile = File(...)):
 @app.post("/api/upload-ipfs")
 async def upload_ipfs(
     file: UploadFile = File(...),
-    metadata_json: str = "{}"
+    metadata_json: str = Form("{}"),
+    user=Depends(wallet_user),
 ):
-    data = await file.read()
-
-    meta = json.loads(metadata_json)
+    data = await read_upload(file)
+    try:
+        meta = json.loads(metadata_json)
+        if not isinstance(meta, dict) or not isinstance(meta.get("title"), str) or not meta["title"].strip():
+            raise ValueError()
+        price = meta.get("recommended_price_usdc")
+        quality = meta.get("quality_score")
+        if type(price) is not int or not 1 <= price <= 100 or type(quality) not in (int, float) or not 0.4 <= quality <= 1:
+            raise ValueError()
+        if not isinstance(meta.get("summary"), str) or len(meta["summary"]) > 20000:
+            raise ValueError()
+        if not isinstance(meta.get("domain"), str) or not isinstance(meta.get("tags"), list) or any(not isinstance(t, str) for t in meta["tags"]):
+            raise ValueError()
+    except (ValueError, TypeError):
+        raise HTTPException(422, "Supply valid analyzed metadata, quality 0.4–1 and a whole USDC price from 1–100") from None
 
     # ---------------------------------------------------------
     # Generate embedding
@@ -263,15 +300,12 @@ async def upload_ipfs(
     # Generate vector ID
     # ---------------------------------------------------------
 
-    vid = quantum_hash(
-        file_cid.encode()
-    )[:16]
 
     # ---------------------------------------------------------
     # Save to PostgreSQL + pgvector
     # ---------------------------------------------------------
 
-    await insert_embedding(
+    stored = await insert_embedding(
     title=meta.get("title", ""),
     domain=meta.get("domain", "other"),
     tags=meta.get("tags", []),
@@ -281,6 +315,7 @@ async def upload_ipfs(
     embedding=embedding,
     file_cid=file_cid,
     metadata_cid=metadata_cid,
+    user_id=user["id"],
 )
 
     # ---------------------------------------------------------
@@ -290,137 +325,119 @@ async def upload_ipfs(
     return {
         "file_cid": file_cid,
         "metadata_cid": metadata_cid,
-        "vector_id": vid,
+        "vector_id": stored["vector_id"],
     }
+
+
+class SearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=2000)
+    domain: str | None = Field(default=None, max_length=100)
+    max_price: int | None = Field(default=None, ge=0, le=1000000)
+
+
+async def read_upload(file):
+    data = await file.read(20 * 1024 * 1024 + 1)
+    if len(data) > 20 * 1024 * 1024:
+        raise HTTPException(413, "Files must be 20 MB or smaller")
+    if len(data) < 100:
+        raise HTTPException(422, "File too small or empty")
+    return data
 
 
 @app.post("/api/search")
-async def search(body: dict):
-    query = body.get("query", "").strip()
-    if not query:
-        raise HTTPException(400, "query field is required")
-
-    results = await quantum_enhanced_search(
-        query, domain=body.get("domain"), max_price=body.get("max_price")
-    )
-    return {"query": query, "results": results, "count": len(results)}
+async def search(body: SearchRequest):
+    if not body.query.strip():
+        raise HTTPException(400, "Enter a search query")
+    results = await quantum_enhanced_search(body.query.strip(), domain=body.domain, max_price=body.max_price)
+    return {"query": body.query, "results": results, "count": len(results)}
 
 
 @app.get("/api/assets/{token_id}/access")
-async def check_asset_access(
-    token_id: int,
-    wallet_address: str
-):
+async def check_asset_access(token_id: int, user=Depends(wallet_user)):
     if token_id <= 0:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid token ID"
-        )
-
-    asset = await get_asset_by_token_id(token_id)
-
-    if not asset:
-        raise HTTPException(
-            status_code=404,
-            detail="Knowledge asset not found"
-        )
-
+        raise HTTPException(400, "Invalid token ID")
     try:
-        purchased = has_purchased(
-            token_id,
-            wallet_address
-        )
+        onchain = await asyncio.to_thread(get_knowledge_asset, token_id)
+        purchased = await asyncio.to_thread(has_purchased, token_id, user["wallet_address"])
+        count = await asyncio.to_thread(get_purchase_count, token_id, user["wallet_address"])
+    except Exception:
+        raise HTTPException(503, "Could not verify this asset on-chain. Retry shortly.") from None
+    creator = onchain["creator"].lower() == user["wallet_address"].lower()
+    granted = bool(onchain["active"] and (purchased or creator))
+    return {"token_id": token_id, "wallet_address": user["wallet_address"],
+            "has_purchased": purchased, "purchase_count": count, "access_granted": granted,
+            "file_url": "https://ipfs.io/ipfs/" + onchain["ipfs_cid"] if granted else None,
+            "storage_notice": "Files on public IPFS are publicly retrievable; entitlement is a license record, not encryption."}
 
-        purchase_count = get_purchase_count(
-            token_id,
-            wallet_address
-        )
 
-    except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid wallet address"
-        )
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Blockchain verification failed: {str(e)}"
-        )
-
-    return {
-        "token_id": token_id,
-        "wallet_address": wallet_address,
-        "has_purchased": purchased,
-        "purchase_count": purchase_count,
-        "access_granted": purchased,
-        "asset": {
-            "title": asset["title"],
-            "domain": asset["domain"],
-            "quality": asset["quality"],
-            "price_usdc": asset["price_usdc"],
-        },
-    }
+class LinkTokenRequest(BaseModel):
+    token_id: int = Field(gt=0)
 
 
 @app.post("/api/assets/{vector_id}/link-token")
-async def link_token(
-    vector_id: str,
-    body: dict
-):
-    token_id = body.get("token_id")
-    creator_address = body.get("creator_address")
-
-    if token_id is None:
-        raise HTTPException(
-            status_code=400,
-            detail="token_id is required"
-        )
-
-    if not creator_address:
-        raise HTTPException(
-            status_code=400,
-            detail="creator_address is required"
-        )
-
+async def link_token(vector_id: str, body: LinkTokenRequest, user=Depends(wallet_user)):
+    conn = await get_conn()
     try:
-        token_id = int(token_id)
-    except (TypeError, ValueError):
-        raise HTTPException(
-            status_code=400,
-            detail="token_id must be an integer"
-        )
+        async with conn.transaction():
+            row = await conn.fetchrow("SELECT * FROM knowledge_assets WHERE vector_id=$1 AND user_id=$2 FOR UPDATE", vector_id, user["id"])
+            if not row:
+                raise HTTPException(404, "Upload not found in your account")
+            if row["token_id"] and row["token_id"] != body.token_id:
+                raise HTTPException(409, "Upload is already linked to a different token")
+            try:
+                asset = await asyncio.to_thread(get_knowledge_asset, body.token_id)
+            except Exception:
+                raise HTTPException(503, "Could not verify the minted token. Retry shortly.") from None
+            if (asset["creator"].lower() != user["wallet_address"].lower()
+                    or asset["ipfs_cid"] != row["file_cid"] or asset["metadata_cid"] != row["metadata_cid"]):
+                raise HTTPException(403, "Token creator and content must match your verified wallet and upload")
+            if asset["price_usdc"] != row["price_usdc"] * 1000000:
+                raise HTTPException(409, "Minted price must match the uploaded price")
+            await conn.execute("UPDATE knowledge_assets SET token_id=$2 WHERE vector_id=$1", vector_id, body.token_id)
+        return {"success": True, "vector_id": vector_id, "token_id": body.token_id}
+    finally:
+        await conn.close()
 
+
+@app.get("/api/account/dashboard")
+async def dashboard(user=Depends(current_user)):
+    conn = await get_conn()
     try:
-        onchain_asset = get_knowledge_asset(token_id)
+        assets = await conn.fetch("SELECT vector_id,title,token_id,file_cid,metadata_cid,price_usdc,quality,created_at FROM knowledge_assets WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100", user["id"])
+        rows = await conn.fetch("SELECT * FROM payment_orders WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100", user["id"])
+        from services.payments.models import PaymentOrder
+        return {"assets": [dict(a) for a in assets], "orders": [PaymentOrder.model_validate(dict(r)).model_dump() for r in rows]}
+    finally:
+        await conn.close()
 
-    except Exception as e:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Token {token_id} does not exist on-chain"
-        )
 
-    if (
-        onchain_asset["creator"].lower()
-        != creator_address.lower()
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="Creator address does not match NFT creator"
-        )
+@app.get("/api/capabilities")
+async def capabilities():
+    configured = bool(os.getenv("RAZORPAY_KEY_ID", "").startswith("rzp_test_") and os.getenv("RAZORPAY_KEY_SECRET") and os.getenv("SETTLEMENT_ENABLED") == "true" and os.getenv("SETTLEMENT_PRIVATE_KEY"))
+    return {"fiat_configured": configured, "fiat_message": "Test checkout configured; availability is verified against each listing before payment." if configured else "UPI/card test checkout awaits settlement deployment and provider credentials.",
+            "bridge_available": False, "bridge_message": "Combined swap/bridge checkout is not available on Polygon Amoy.", "chain_id": 80002}
 
-    await update_token_id(
-        vector_id,
-        token_id
-    )
 
-    return {
-        "success": True,
-        "vector_id": vector_id,
-        "token_id": token_id,
-        "creator": onchain_asset["creator"],
-        "message": "Blockchain token linked to knowledge asset"
-    }
+@app.get("/api/assets/{token_id}/payment")
+async def latest_payment(token_id: int, user=Depends(current_user)):
+    conn = await get_conn()
+    try:
+        row = await conn.fetchrow("SELECT * FROM payment_orders WHERE user_id=$1 AND token_id=$2 AND payment_method IN ('upi','card') ORDER BY created_at DESC LIMIT 1", user["id"], token_id)
+        from services.payments.models import PaymentOrder
+        return {"order": PaymentOrder.model_validate(dict(row)).model_dump() if row else None}
+    finally:
+        await conn.close()
+
+
+async def require_order_owner(order_id, user):
+    conn = await get_conn()
+    try:
+        found = await conn.fetchval("SELECT 1 FROM payment_orders WHERE order_id=$1 AND user_id=$2", order_id, user["id"])
+    finally:
+        await conn.close()
+    if not found:
+        raise HTTPException(404, "Payment order not found in your account")
+
 
 # =========================================================
 # PAYMENT API
@@ -466,7 +483,8 @@ async def razorpay_webhook(request: Request):
     return {"received": True, "status": order.status}
 
 @app.post("/api/payments/{order_id}/settle")
-async def settle_payment(order_id: str):
+async def settle_payment(order_id: str, user=Depends(wallet_user)):
+    await require_order_owner(order_id, user)
     from services.payments.settlement import settle_order
     try:
         order = await settle_order(order_id)
@@ -476,11 +494,13 @@ async def settle_payment(order_id: str):
 
 @app.post("/api/payments/create")
 async def create_payment(
-    request: CreatePaymentRequest
+    request: CreatePaymentRequest, user=Depends(wallet_user),
 ):
+    if request.buyer_address.lower() != user["wallet_address"].lower():
+        raise HTTPException(403, "Buyer must be your verified wallet")
     try:
         order = await payment_service.create_order(
-            request
+            request, user_id=user["id"]
         )
 
         return {
@@ -497,8 +517,9 @@ async def create_payment(
 
 @app.get("/api/payments/{order_id}")
 async def get_payment(
-    order_id: str
+    order_id: str, user=Depends(current_user),
 ):
+    await require_order_owner(order_id, user)
     order = await payment_service.get_order(order_id)
 
     if not order:
@@ -517,7 +538,9 @@ async def get_payment(
 async def confirm_payment(
     order_id: str,
     confirmation: ConfirmPaymentRequest | None = None,
+    user=Depends(wallet_user),
 ):
+    await require_order_owner(order_id, user)
     try:
         order = await payment_service.confirm_order(
             order_id,

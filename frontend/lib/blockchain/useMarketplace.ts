@@ -17,6 +17,7 @@ import {
  */
 export function useIsListed(tokenId: bigint) {
   return useReadContract({
+    chainId: polygonAmoy.id,
     address: marketplaceContract.address,
     abi: marketplaceContract.abi,
     functionName: "isListed",
@@ -29,6 +30,7 @@ export function useIsListed(tokenId: bigint) {
  */
 export function useTokenToListing(tokenId: bigint) {
   return useReadContract({
+    chainId: polygonAmoy.id,
     address: marketplaceContract.address,
     abi: marketplaceContract.abi,
     functionName: "tokenToListing",
@@ -41,6 +43,7 @@ export function useTokenToListing(tokenId: bigint) {
  */
 export function useListing(listingId: bigint) {
   return useReadContract({
+    chainId: polygonAmoy.id,
     address: marketplaceContract.address,
     abi: marketplaceContract.abi,
     functionName: "listings",
@@ -65,6 +68,7 @@ export function useMarketplaceWrite() {
 
   function approveNFT(tokenId: bigint) {
     nftApproval.writeContract({
+      chainId: polygonAmoy.id,
       address: knowledgeAssetContract.address,
       abi: knowledgeAssetContract.abi,
       functionName: "approve",
@@ -84,6 +88,7 @@ export function useMarketplaceWrite() {
     }[]
   ) {
     listingWrite.writeContract({
+      chainId: polygonAmoy.id,
       address: marketplaceContract.address,
       abi: marketplaceContract.abi,
       functionName: "listFixedPrice",

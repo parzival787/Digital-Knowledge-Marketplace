@@ -17,7 +17,7 @@ class PaymentService:
             provider = RazorpayProvider()
             self.providers.update({PaymentMethod.UPI: provider, PaymentMethod.CARD: provider})
 
-    async def create_order(self, request: CreatePaymentRequest) -> PaymentOrder:
+    async def create_order(self, request: CreatePaymentRequest, user_id: int | None = None) -> PaymentOrder:
         asset = await get_asset_by_token_id(request.token_id)
         if not asset:
             raise ValueError(f"Knowledge asset {request.token_id} not found")
@@ -46,12 +46,12 @@ class PaymentService:
             await conn.execute("""
                 INSERT INTO payment_orders
                     (order_id, token_id, buyer_address, amount_usdc, payment_method, status,
-                     fiat_currency, fiat_amount, exchange_rate, checkout_key, listing_id, marketplace_address, chain_id)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                     fiat_currency, fiat_amount, exchange_rate, checkout_key, listing_id, marketplace_address, chain_id, user_id)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
             """, order.order_id, order.token_id, order.buyer_address,
                 order.amount_usdc, order.payment_method.value, order.status.value,
                 order.fiat_currency, order.fiat_amount, order.exchange_rate, order.checkout_key,
-                order.listing_id, order.marketplace_address, order.chain_id)
+                order.listing_id, order.marketplace_address, order.chain_id, user_id)
             try:
                 result = await provider.create_payment(order)
                 provider_id = result.get("provider_order_id")

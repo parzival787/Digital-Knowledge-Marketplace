@@ -3,6 +3,7 @@ import "./globals.css";
 
 import Web3Provider from "@/providers/Web3Provider";
 import Navbar from "@/components/layout/Navbar";
+import { AuthProvider } from "@/providers/AuthProvider";
 
 export default function RootLayout({
   children,
@@ -13,8 +14,10 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <Web3Provider>
+          <AuthProvider>
           <Navbar />
           {children}
+          </AuthProvider>
         </Web3Provider>
       </body>
     </html>

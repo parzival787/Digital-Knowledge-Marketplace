@@ -9,6 +9,7 @@ import { knowledgeAssetContract, marketplaceContract } from "@/lib/blockchain/co
 
 export function useTotalMinted() {
   return useReadContract({
+    chainId: 80002,
     address: knowledgeAssetContract.address,
     abi: knowledgeAssetContract.abi,
     functionName: "totalMinted",
@@ -17,6 +18,7 @@ export function useTotalMinted() {
 
 export function useKnowledgeAsset(tokenId: bigint) {
   return useReadContract({
+    chainId: 80002,
     address: knowledgeAssetContract.address,
     abi: knowledgeAssetContract.abi,
     functionName: "getAsset",
@@ -26,6 +28,7 @@ export function useKnowledgeAsset(tokenId: bigint) {
 
 export function useAssetOwner(tokenId: bigint) {
   return useReadContract({
+    chainId: 80002,
     address: knowledgeAssetContract.address,
     abi: knowledgeAssetContract.abi,
     functionName: "ownerOf",
@@ -39,6 +42,7 @@ export function useAssetOwner(tokenId: bigint) {
 
 export function useIsListed(tokenId: bigint) {
   return useReadContract({
+    chainId: 80002,
     address: marketplaceContract.address,
     abi: marketplaceContract.abi,
     functionName: "isListed",
