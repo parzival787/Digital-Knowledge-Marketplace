@@ -10,7 +10,7 @@ type Order = {
   order_id: string; status: string; amount_usdc: number; provider_order_id: string | null;
   fiat_amount: number | null; fiat_currency: string | null; exchange_rate: string | null;
   checkout_key: string | null; settlement_tx_hash: string | null; error: string | null;
-  provider_payment_id: string | null;
+  provider_payment_id: string | null; recovery_status: string | null; refund_id: string | null;
 };
 type Confirmation = { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string };
 type CheckoutOptions = {
@@ -56,12 +56,12 @@ export default function Web2Checkout({ tokenId, buyer, canStart }: { tokenId: bi
   }, [tokenId, user?.id]);
 
   useEffect(() => {
-    if (!order || ["FAILED", "ENTITLEMENT_GRANTED"].includes(order.status)) return;
+    if (!order || order.recovery_status || ["FAILED", "ENTITLEMENT_GRANTED"].includes(order.status)) return;
     let current = true;
     const timer = setTimeout(async () => {
       try {
         const latest = await request(order.order_id);
-        const value = ["PROVIDER_CONFIRMED", "SETTLEMENT_PENDING", "SETTLED"].includes(latest.status)
+        const value = !latest.recovery_status && ["PROVIDER_CONFIRMED", "SETTLEMENT_PENDING", "SETTLED"].includes(latest.status)
           ? await request(`${latest.order_id}/settle`, {}) : latest;
         if (current) { setOrder(value); if (value.status === "ENTITLEMENT_GRANTED") await cache.invalidateQueries(); }
       } catch { if (current) setError("Could not refresh payment status. Use Check status to retry."); }
@@ -101,7 +101,7 @@ export default function Web2Checkout({ tokenId, buyer, canStart }: { tokenId: bi
       setRestoring(false);
       if (!value) { setOrder(null); return; }
       const id = value.order_id;
-      setOrder((["PROVIDER_CONFIRMED", "SETTLEMENT_PENDING", "SETTLED"].includes(value.status) || value.status === "FAILED" && !!value.provider_payment_id)
+      setOrder(!value.recovery_status && (["PROVIDER_CONFIRMED", "SETTLEMENT_PENDING", "SETTLED"].includes(value.status) || value.status === "FAILED" && !!value.provider_payment_id)
         ? await request(`${id}/settle`, {}) : value);
     } catch (err) { setError(err instanceof Error ? err.message : "Status unavailable."); }
     finally { setBusy(false); }
@@ -117,10 +117,11 @@ export default function Web2Checkout({ tokenId, buyer, canStart }: { tokenId: bi
       <option value="upi">UPI</option><option value="card">Card</option>
     </select></label>
     {order?.fiat_amount && <p>Quote: {(order.fiat_amount / 100).toFixed(2)} {order.fiat_currency} for {order.amount_usdc} USDC. Test rate: ₹{order.exchange_rate} per USDC.</p>}
-    {canStart && (!order || order.status === "PENDING" || order.status === "FAILED" && !order.provider_payment_id) && <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy || !ready || restoring || !capability?.fiat_configured} onClick={checkout}>{order?.status === "PENDING" ? "Resume checkout" : "Pay with UPI / Card"}</button>}
+    {canStart && !order?.recovery_status && (!order || order.status === "PENDING" || order.status === "FAILED" && !order.provider_payment_id) && <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy || !ready || restoring || !capability?.fiat_configured} onClick={checkout}>{order?.status === "PENDING" ? "Resume checkout" : "Pay with UPI / Card"}</button>}
     {order && <>
-      <p role="status">{labels[order.status] || order.status}</p>
+      <p role="status">{order.recovery_status === "REFUNDED" ? "Full refund verified" : order.recovery_status === "REVIEW_REQUIRED" ? "Payment under review — do not pay again" : labels[order.status] || order.status}</p>
       <p className="break-all text-xs">Order: {order.order_id}</p>
+      {order.refund_id && <p className="break-all text-xs">Refund: {order.refund_id}</p>}
       {order.settlement_tx_hash && <a className="block break-all text-sm underline" href={`https://amoy.polygonscan.com/tx/${order.settlement_tx_hash}`} target="_blank" rel="noreferrer">View settlement transaction</a>}
       {order.error && <p role="alert">{order.error}</p>}
     </>}

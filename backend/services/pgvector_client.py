@@ -113,7 +113,22 @@ async def setup_tables():
                 ADD COLUMN IF NOT EXISTS settlement_raw_tx TEXT
         """)
         await conn.execute("ALTER TABLE payment_orders ADD COLUMN IF NOT EXISTS user_id BIGINT")
+        await conn.execute("""
+            ALTER TABLE payment_orders
+                ADD COLUMN IF NOT EXISTS recovery_status TEXT CHECK (recovery_status IN ('REVIEW_REQUIRED', 'REFUNDED')),
+                ADD COLUMN IF NOT EXISTS settlement_attempts INT NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS settlement_started_at TIMESTAMPTZ,
+                ADD COLUMN IF NOT EXISTS settlement_last_attempt_at TIMESTAMPTZ,
+                ADD COLUMN IF NOT EXISTS refund_id TEXT UNIQUE
+        """)
         await conn.execute("ALTER TABLE knowledge_assets ADD COLUMN IF NOT EXISTS user_id BIGINT")
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS payment_recovery_events (
+                id BIGSERIAL PRIMARY KEY, order_id TEXT NOT NULL REFERENCES payment_orders(order_id),
+                action TEXT NOT NULL, reason TEXT NOT NULL,
+                actor TEXT NOT NULL DEFAULT CURRENT_USER, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
         await conn.execute("ALTER TABLE knowledge_assets ADD COLUMN IF NOT EXISTS summary TEXT DEFAULT ''")
         await conn.execute("CREATE INDEX IF NOT EXISTS assets_hash_idx ON knowledge_assets(blake3_hash)")
         await conn.execute("CREATE INDEX IF NOT EXISTS reviews_token_idx ON reviews(token_id)")

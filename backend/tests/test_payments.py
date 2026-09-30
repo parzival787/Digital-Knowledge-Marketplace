@@ -133,6 +133,9 @@ class PaymentTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(settlement.broadcast_and_verify(order, raw), "settled")
             receipt.status = 0
             self.assertEqual(settlement.broadcast_and_verify(order, raw), "reverted")
+            w3.eth.block_number = 100
+            self.assertEqual(settlement.broadcast_and_verify(order, raw), "pending")
+            w3.eth.block_number = 101
             receipt.status = 1
             w3.eth.get_transaction.return_value["from"] = "attacker"
             with self.assertRaises(ValueError):
@@ -177,6 +180,13 @@ class PaymentTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(pending.settlement_tx_hash, "0x123")
             fresh = await service.PaymentService().get_order(order.order_id)
             self.assertNotIn("settlement_raw_tx", fresh.model_dump())
+            # Browser polling cannot bypass the durable 30-second retry spacing.
+            throttled = await settlement.settle_order(order.order_id)
+            self.assertEqual(throttled.status, PaymentStatus.SETTLEMENT_PENDING)
+            self.assertEqual(broadcast.call_count, 1)
+            conn = await self.isolated_connection()
+            await conn.execute("UPDATE payment_orders SET settlement_last_attempt_at=NOW()-INTERVAL '31 seconds' WHERE order_id=$1", order.order_id)
+            await conn.close()
             granted = await settlement.settle_order(order.order_id)
             self.assertEqual(granted.status, PaymentStatus.ENTITLEMENT_GRANTED)
             self.assertEqual(prepare.call_count, 1)
@@ -223,6 +233,100 @@ class PaymentTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ValueError):
                 await provider.verify_payment(order, {**confirmation, "razorpay_signature": "0" * 64})
 
+    async def test_recovery_budget_and_refund_are_durable(self):
+        from services.payments import recovery
+        order = await service.PaymentService().create_order(self.request)
+        conn = await self.isolated_connection()
+        await conn.execute("UPDATE payment_orders SET payment_method='card', status='PROVIDER_CONFIRMED', provider_payment_id='pay_test', settlement_attempts=20 WHERE order_id=$1", order.order_id)
+        await conn.close()
+        with patch.object(settlement, "prepare") as prepare:
+            results = await asyncio.gather(*(settlement.settle_order(order.order_id) for _ in range(8)), return_exceptions=True)
+            self.assertTrue(any(not isinstance(value, Exception) and value.recovery_status == "REVIEW_REQUIRED" for value in results))
+            prepare.assert_not_called()
+            await settlement.reconcile_payments()
+            prepare.assert_not_called()
+        with patch.object(recovery, "verify_refund", new=AsyncMock(side_effect=ValueError("Not processed"))):
+            with self.assertRaises(ValueError):
+                await recovery.recover(order.order_id, "record-refund", "Provider refund inspected", "rfnd_test")
+        self.assertEqual((await service.PaymentService().get_order(order.order_id)).recovery_status, "REVIEW_REQUIRED")
+        async def refund_with_concurrent_settlement(*args):
+            with self.assertRaises(ValueError):
+                await settlement.settle_order(order.order_id)
+        with patch.object(recovery, "verify_refund", new=AsyncMock(side_effect=refund_with_concurrent_settlement)):
+            refunded = await recovery.recover(order.order_id, "record-refund", "Full provider refund verified", "rfnd_test")
+        self.assertEqual(refunded.recovery_status, "REFUNDED")
+        self.assertEqual(refunded.refund_id, "rfnd_test")
+        with self.assertRaises(ValueError):
+            await recovery.recover(order.order_id, "resume", "Cannot resume refunded order")
+        with patch.object(settlement, "prepare") as prepare:
+            await settlement.settle_order(order.order_id)
+            prepare.assert_not_called()
+        conn = await self.isolated_connection()
+        self.assertEqual(await conn.fetchval("SELECT COUNT(*) FROM payment_recovery_events WHERE order_id=$1", order.order_id), 1)
+        await conn.close()
+
+    async def test_recovery_timeout_keeps_signed_transaction(self):
+        order = await service.PaymentService().create_order(self.request)
+        conn = await self.isolated_connection()
+        await conn.execute("UPDATE payment_orders SET payment_method='card', status='SETTLEMENT_PENDING', provider_payment_id='pay_test', settlement_raw_tx='0xabc', settlement_tx_hash='0x123', settlement_started_at=NOW()-INTERVAL '16 minutes' WHERE order_id=$1", order.order_id)
+        await conn.close()
+        with patch.object(settlement, "broadcast_and_verify") as broadcast:
+            held = await settlement.settle_order(order.order_id)
+            self.assertEqual(held.recovery_status, "REVIEW_REQUIRED")
+            self.assertEqual(held.settlement_tx_hash, "0x123")
+            broadcast.assert_not_called()
+        conn = await self.isolated_connection()
+        self.assertEqual(await conn.fetchval("SELECT settlement_raw_tx FROM payment_orders WHERE order_id=$1", order.order_id), "0xabc")
+        await conn.close()
+
+    def test_refund_rejects_pending_successful_and_shallow_receipts(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from web3 import Web3
+        from services.payments.recovery import require_refundable
+        from services.payments.models import PaymentOrder
+        order = PaymentOrder(order_id="test", token_id=1, buyer_address=self.request.buyer_address,
+            amount_usdc=5, payment_method=PaymentMethod.CARD, status=PaymentStatus.SETTLEMENT_PENDING,
+            chain_id=80002, marketplace_address="market", settlement_tx_hash=Web3.to_hex(Web3.keccak(hexstr="0xabcd")))
+        w3 = Mock()
+        receipt = SimpleNamespace(status=1, blockNumber=100)
+        w3.eth.get_transaction_receipt.return_value = receipt
+        w3.eth.block_number = 101
+        with patch.object(settlement, "connection", return_value=(w3, None, SimpleNamespace(address="market"))):
+            with self.assertRaises(ValueError):
+                require_refundable(order, "0xabcd")
+            receipt.status = 0
+            w3.eth.block_number = 100
+            with self.assertRaises(ValueError):
+                require_refundable(order, "0xabcd")
+            w3.eth.block_number = 101
+            require_refundable(order, "0xabcd")
+            from web3.exceptions import TransactionNotFound
+            w3.eth.get_transaction_receipt.side_effect = TransactionNotFound("Not found")
+            with self.assertRaises(TransactionNotFound):
+                require_refundable(order, "0xabcd")
+
+    async def test_refund_checks_provider_amount_identity_and_status(self):
+        from services.payments.recovery import verify_refund
+        order = (await service.PaymentService().create_order(self.request)).model_copy(update={
+            "provider_payment_id": "pay_test", "provider_order_id": "order_test", "fiat_amount": 40000, "fiat_currency": "INR"})
+        refund = dict(id="rfnd_test", payment_id="pay_test", status="processed", amount=40000, currency="INR")
+        payment = dict(id="pay_test", order_id="order_test", status="refunded", amount=40000, amount_refunded=40000, currency="INR")
+        client = httpx.AsyncClient
+        transport = httpx.MockTransport(lambda request: httpx.Response(200, json=refund if "/refunds/" in request.url.path else payment))
+        with patch.dict(os.environ, {"RAZORPAY_KEY_ID": "rzp_test_example", "RAZORPAY_KEY_SECRET": "test-secret"}), \
+             patch("services.payments.recovery.httpx.AsyncClient", side_effect=lambda **kw: client(transport=transport, **kw)):
+            await verify_refund(order, "rfnd_test")
+            for field, value in [("status", "pending"), ("amount", 39999), ("payment_id", "pay_other"), ("currency", "USD")]:
+                original = refund[field]
+                refund[field] = value
+                with self.assertRaises(ValueError):
+                    await verify_refund(order, "rfnd_test")
+                refund[field] = original
+            payment["order_id"] = "order_other"
+            with self.assertRaises(ValueError):
+                await verify_refund(order, "rfnd_test")
+
     def test_wallet_validation(self):
         for address in ("no-wallet", "0x" + "0" * 40):
             with self.assertRaises(ValueError):
@@ -243,6 +347,10 @@ class PaymentTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(failed.settlement_tx_hash, "0x1")
             await settlement.reconcile_payments()
             self.assertEqual(prepare.call_count, 1)  # Background reconciliation must not spend gas again.
+            held = await settlement.settle_order(order.order_id)
+            self.assertEqual(held.recovery_status, "REVIEW_REQUIRED")
+            from services.payments.recovery import recover
+            await recover(order.order_id, "resume", "Listing and funding checked by operator")
             retried = await settlement.settle_order(order.order_id)
             self.assertEqual(retried.status, PaymentStatus.ENTITLEMENT_GRANTED)
             self.assertEqual(retried.settlement_tx_hash, "0x2")

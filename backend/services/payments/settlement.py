@@ -2,6 +2,7 @@
 import asyncio
 import os
 import logging
+from datetime import datetime, timezone, timedelta
 
 from web3 import Web3
 from web3.exceptions import TransactionNotFound, TimeExhausted
@@ -103,8 +104,6 @@ def broadcast_and_verify(order: PaymentOrder, raw: str):
             receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=15, poll_latency=1)
         except TimeExhausted:
             return "pending"
-    if receipt.status != 1:
-        return "reverted"
     if w3.eth.block_number < receipt.blockNumber + 1:
         return "pending"
     expected_data = market.encode_abi("buyAssetFor", args=[
@@ -114,6 +113,8 @@ def broadcast_and_verify(order: PaymentOrder, raw: str):
     if (tx["to"] != market.address or tx["from"] != account.address
             or Web3.to_hex(tx["input"]).lower() != expected_data.lower()):
         raise ValueError("Settlement transaction does not match this order")
+    if receipt.status != 1:
+        return "reverted"
     return "settled"
 
 
@@ -139,10 +140,30 @@ async def settle_order(order_id: str) -> PaymentOrder:
             raise ValueError("Mock payments never settle on-chain")
         if order.status == PaymentStatus.ENTITLEMENT_GRANTED:
             return order
+        if order.recovery_status:
+            return order
         if order.status not in (PaymentStatus.PROVIDER_CONFIRMED, PaymentStatus.SETTLEMENT_PENDING, PaymentStatus.SETTLED, PaymentStatus.FAILED):
             raise ValueError("Only provider-confirmed payments can settle")
         if not order.provider_payment_id:
             raise ValueError("Provider payment has not been verified")
+        now = datetime.now(timezone.utc)
+        started = row["settlement_started_at"]
+        # A timeout is uncertainty, never proof that a signed transaction failed.
+        if row["settlement_attempts"] >= 20 or (started and now - started >= timedelta(minutes=15)):
+            await conn.execute("""
+                UPDATE payment_orders SET recovery_status='REVIEW_REQUIRED',
+                    error='Payment needs operator review. Do not pay again; settlement is paused.',
+                    updated_at=clock_timestamp() WHERE order_id=$1
+            """, order_id)
+            return PaymentOrder.model_validate(dict(await conn.fetchrow("SELECT * FROM payment_orders WHERE order_id=$1", order_id)))
+        last_attempt = row["settlement_last_attempt_at"]
+        if last_attempt and now - last_attempt < timedelta(seconds=30):
+            return order
+        await conn.execute("""
+            UPDATE payment_orders SET settlement_attempts=settlement_attempts+1,
+                settlement_started_at=COALESCE(settlement_started_at, clock_timestamp()),
+                settlement_last_attempt_at=clock_timestamp() WHERE order_id=$1
+        """, order_id)
         raw = row["settlement_raw_tx"]
         if order.status == PaymentStatus.FAILED:
             # Only an explicitly requested retry of a proven mined revert may
@@ -173,6 +194,7 @@ async def settle_order(order_id: str) -> PaymentOrder:
                 # A mined revert consumed the nonce but granted no entitlement.
                 await conn.execute("""
                     UPDATE payment_orders SET status='FAILED',
+                        recovery_status='REVIEW_REQUIRED',
                         error='Settlement reverted; retry after resolving the listing or funding issue',
                         updated_at=clock_timestamp() WHERE order_id=$1
                 """, order_id)
@@ -198,6 +220,7 @@ async def reconcile_payments():
             SELECT order_id FROM payment_orders
             WHERE payment_method IN ('upi', 'card')
               AND status IN ('PROVIDER_CONFIRMED', 'SETTLEMENT_PENDING', 'SETTLED')
+              AND recovery_status IS NULL
             ORDER BY CASE WHEN status='SETTLEMENT_PENDING' THEN 0 ELSE 1 END, created_at
             LIMIT 20
         """)

@@ -60,6 +60,8 @@ class PaymentOrder(BaseModel):
     listing_id: Optional[int] = None
     marketplace_address: Optional[str] = None
     chain_id: Optional[int] = None
+    recovery_status: Optional[str] = None
+    refund_id: Optional[str] = None
 
 
 class ConfirmPaymentRequest(BaseModel):

@@ -158,3 +158,18 @@ Solidity interfaces/addresses are unchanged; the source changes are not deployed
 Frontend Marketplace ABI was missing deployed hasPurchased/purchaseCount reads;
 these were added so entitlement-dependent UI can resolve. Funded methods remain
 deployment-gated in the backend.
+
+## Production payment decision and recovery continuation
+
+The owner delegated the production model choice. PRODUCTION_PAYMENTS.md selects
+provider-operated on-ramp delivery to the buyer wallet followed by an explicit
+marketplace purchase. Transak remains a candidate only: India/INR support was not
+verified from current official coverage. No production converter is integrated.
+Added durable review holds after 20 attempts/15 minutes, 30-second retry spacing,
+operator hold/resume/full-refund verification CLI, audit events and frontend
+review/refund labels. Mined reverts require receipt depth/identity before retry.
+No refund is submitted by the tool. Unknown/pending/successful chain transactions
+cannot be recorded as refunded. Amoy/test-key guards remain.
+Production provider approval, contract-enforced reservation, independent audit,
+production security deployment and research items remain outstanding. This payment
+preparation does not mark the entire remaining roadmap complete.

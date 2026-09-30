@@ -154,3 +154,19 @@ The CLI exits 1 because findings remain, not because analysis failed.
 
 References: [Slither usage](https://github.com/crytic/slither/wiki/Usage) and
 [Solidity known bugs](https://docs.soliditylang.org/en/latest/bugs.html).
+
+## Production payment preparation update
+
+See PRODUCTION_PAYMENTS.md for the selected on-ramp model, provider qualification,
+customer funding/purchase flow, refund policy and operator commands. This resolves
+the design choice, not provider availability or actual INR conversion. Item 13
+remains partial; the current public Transak coverage did not establish India support.
+Payment recovery now includes durable review holds, bounded retries, audited operator
+resume and server verification of already-processed full test refunds. The checkout
+and dashboard expose review/refund state. Refund submission remains operator-reviewed;
+exclusive listing reservations are not implemented. No timeout deletes signed
+transaction data or authorizes a refund. No contracts or addresses changed.
+
+Verification: 28 backend unittest checks (disposable database schemas and simulated
+provider/chain boundaries) and frontend production build/typecheck/lint passed.
+The existing optional pino-pretty warning remains. No live payment E2E was performed.
