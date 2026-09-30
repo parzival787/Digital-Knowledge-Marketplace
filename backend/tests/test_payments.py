@@ -327,6 +327,33 @@ class PaymentTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ValueError):
                 await verify_refund(order, "rfnd_test")
 
+    async def test_operator_role_records_session_identity_and_cannot_rewrite_audit(self):
+        from pathlib import Path
+        import asyncpg
+        role = "recovery_test_" + uuid.uuid4().hex
+        conn = await self.isolated_connection()
+        order = await service.PaymentService().create_order(self.request)
+        actor = await conn.fetchval("SELECT SESSION_USER")
+        template = Path(__file__).resolve().parents[1].joinpath("operator_roles.sql").read_text(encoding="utf-8")
+        template = template.replace("dkm_recovery_operator", role).replace("SCHEMA public", f'SCHEMA "{self.schema}"').replace("public.", f'"{self.schema}".')
+        try:
+            await conn.execute(template)
+            await conn.execute(f'SET ROLE "{role}"')
+            await conn.execute("INSERT INTO payment_recovery_events(order_id,action,reason) VALUES($1,'hold','Testing individual session attribution')", order.order_id)
+            self.assertEqual(await conn.fetchval("SELECT actor FROM payment_recovery_events WHERE order_id=$1", order.order_id), actor)
+            with self.assertRaises(asyncpg.InsufficientPrivilegeError):
+                await conn.execute("UPDATE payment_recovery_events SET actor='forged'")
+            with self.assertRaises(asyncpg.InsufficientPrivilegeError):
+                await conn.execute("UPDATE payment_orders SET settlement_raw_tx='forged'")
+            with self.assertRaises(asyncpg.InsufficientPrivilegeError):
+                await conn.execute("INSERT INTO payment_recovery_events(order_id,action,reason,actor) VALUES($1,'hold','Forged actor','forged')", order.order_id)
+        finally:
+            await conn.execute("RESET ROLE")
+            if await conn.fetchval("SELECT 1 FROM pg_roles WHERE rolname=$1", role):
+                await conn.execute(f'DROP OWNED BY "{role}"')
+                await conn.execute(f'DROP ROLE "{role}"')
+            await conn.close()
+
     def test_wallet_validation(self):
         for address in ("no-wallet", "0x" + "0" * 40):
             with self.assertRaises(ValueError):

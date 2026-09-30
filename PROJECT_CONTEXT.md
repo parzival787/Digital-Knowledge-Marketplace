@@ -173,3 +173,19 @@ cannot be recorded as refunded. Amoy/test-key guards remain.
 Production provider approval, contract-enforced reservation, independent audit,
 production security deployment and research items remain outstanding. This payment
 preparation does not mark the entire remaining roadmap complete.
+
+## Funding UX and operational readiness continuation
+
+Added /funding with explicit unavailable India/INR state, account wallet display,
+gas guidance and links from fixed-price/auction/navigation. No provider adapter or
+quote is fabricated. Purchases refresh listing/price/active/access before approval
+and immediately before signing; gas estimates and two-block canonical receipt checks
+are shared with auctions. Replaced/reorganized receipts fail closed. A new test file
+covers price/relisting changes, gas margin and receipt/reorg failure cases.
+Added read-only check_demo_readiness.py and operator_roles.sql; recovery actor uses
+SESSION_USER so SET ROLE does not hide personal login attribution. No production
+operator accounts or credentials were created. OWNER_HANDOFF.md contains owner setup,
+engineering migration prerequisites and the live acceptance matrix. New deployment
+still requires legacy market access/history compatibility before default address
+switch. Preflight confirmed current RPC/registry but no funded-settlement interface;
+Razorpay/signing prerequisites remain absent. No live payments or deployment performed.

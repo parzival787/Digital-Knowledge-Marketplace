@@ -18,7 +18,8 @@ import { polygonAmoy } from "viem/chains";
 import AuctionPanel from "./AuctionPanel";
 import Web2Checkout from "./Web2Checkout";
 import Reviews from "./Reviews";
-import { marketplaceContract, mockUSDCContract } from "@/lib/blockchain/contracts";
+import { checkListing, checkGas, confirmedReceipt, PurchaseCheckError } from "@/lib/blockchain/purchaseSafety";
+import { marketplaceContract, mockUSDCContract, knowledgeAssetContract } from "@/lib/blockchain/contracts";
 
 import {
   useIsListed,
@@ -128,7 +129,6 @@ export default function AssetCard({
   const {
     data: isListed,
     isLoading: isListingLoading,
-    refetch: refetchListing,
   } = useIsListed(tokenId);
 
   const {
@@ -236,8 +236,6 @@ export default function AssetCard({
       if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Asset information is unavailable.");
       setMetadata(data);
     } catch (error) {
-      console.error("Metadata fetch error:", error);
-
       setMetadataError(
         error instanceof Error
           ? "Could not load the description. Please try again shortly."
@@ -396,21 +394,25 @@ export default function AssetCard({
     if (!publicClient || marketplacePrice <= 0n) return;
     try {
       setBuyStep("approving");
+      await checkListing(publicClient, marketplaceContract, knowledgeAssetContract, tokenId, connectedAddress, BigInt(listingId as bigint), marketplacePrice);
       const balance = await publicClient.readContract({ ...mockUSDCContract, functionName: "balanceOf", args: [connectedAddress] }) as bigint;
-      if (balance < marketplacePrice) throw new Error("Insufficient USDC");
+      if (balance < marketplacePrice) throw new PurchaseCheckError("Insufficient MockUSDC. Fund your Amoy wallet before buying.");
       const allowance = await publicClient.readContract({ ...mockUSDCContract, functionName: "allowance", args: [connectedAddress, marketplaceContract.address] }) as bigint;
       if (allowance < marketplacePrice) {
+        await checkGas(publicClient, mockUSDCContract, "approve", [marketplaceContract.address, marketplacePrice], connectedAddress);
         const approvalHash = await approveMarketplace(marketplacePrice, connectedAddress);
-        const approval = await publicClient.waitForTransactionReceipt({ hash: approvalHash });
-        if (approval.status !== "success") throw new Error("Approval reverted");
+        await confirmedReceipt(publicClient, approvalHash);
       }
       setBuyStep("buying");
+      await checkGas(publicClient, marketplaceContract, "buyAsset", [BigInt(listingId as bigint)], connectedAddress);
+      await checkListing(publicClient, marketplaceContract, knowledgeAssetContract, tokenId, connectedAddress, BigInt(listingId as bigint), marketplacePrice);
       const hash = await buyAsset(BigInt(listingId as bigint), connectedAddress);
-      const purchase = await publicClient.waitForTransactionReceipt({ hash });
-      if (purchase.status !== "success") throw new Error("Purchase reverted");
+      await confirmedReceipt(publicClient, hash);
+      const entitled = await publicClient.readContract({ ...marketplaceContract, functionName: "hasPurchased", args: [tokenId, connectedAddress] });
+      if (!entitled) throw new PurchaseCheckError("Transaction confirmed but access is not verified. Check status before paying again.");
       await cache.invalidateQueries();
-    } catch {
-      setBuyError("Purchase failed or was cancelled. Check your USDC balance and POL for gas, then retry.");
+    } catch (error) {
+      setBuyError(error instanceof PurchaseCheckError ? error.message : "Purchase not verified. Check your wallet transaction history and access before retrying; a pending transaction may still complete.");
     } finally {
       setBuyStep("idle");
     }
@@ -449,23 +451,6 @@ export default function AssetCard({
    * PURCHASE CONFIRMATION EFFECT
    * ============================================================
    */
-
-  useEffect(() => {
-    if (
-      buyStep !== "buying" ||
-      !isPurchaseConfirmed
-    ) {
-      return;
-    }
-
-    setBuyStep("idle");
-
-    refetchListing();
-  }, [
-    buyStep,
-    isPurchaseConfirmed,
-    refetchListing,
-  ]);
 
   /*
    * ============================================================
@@ -833,11 +818,13 @@ export default function AssetCard({
               : buyStep === "buying" &&
                 isPurchaseConfirming
               ? "Purchasing Asset..."
-              : `Buy for ${formatUSDC(
+              : `Buy with Crypto - ${formatUSDC(
                   marketplacePrice
                 )} USDC`}
           </button>
 
+          <p className="text-sm">You need Amoy test POL for gas, including USDC approval and purchase. No asset is reserved while you fund your wallet or approve tokens.</p>
+          <Link href="/funding" className="block underline">Need USDC? Add USDC (INR funding unavailable)</Link>
           {buyError && (
             <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-600">
               {buyError}
@@ -846,7 +833,7 @@ export default function AssetCard({
 
           {usdcError && (
             <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-600">
-              {usdcError.message}
+              Approval was not verified. Check your wallet transaction history before retrying.
             </div>
           )}
 
@@ -861,6 +848,7 @@ export default function AssetCard({
       )}
 
       {connectedAddress && chainId !== polygonAmoy.id && <button className="mt-4 rounded border p-2" onClick={() => switchChain({ chainId: polygonAmoy.id })}>Switch to Polygon Amoy</button>}
+      {purchaseHash && <a className="mt-4 block break-all underline" href={`https://amoy.polygonscan.com/tx/${purchaseHash}`} target="_blank" rel="noreferrer">Check purchase transaction status</a>}
       {purchased === true && <p className="mt-4 text-green-700" role="status">Purchase entitlement verified on-chain.</p>}
       {verified && connectedAddress && !isOwner && <Web2Checkout key={connectedAddress} tokenId={tokenId} buyer={connectedAddress} canStart={!!isListed && !purchased && asset.active} />}
       {verified && <section className="mt-4 space-y-2"><button className="rounded border p-2" onClick={async () => { setAccessError(""); try { setAccess(await api(`/api/assets/${tokenId}/access`)); } catch (err) { setAccessError(err instanceof Error ? err.message : "Access check failed."); } }}>Check my access</button>{access && <><p>{access.access_granted ? "Your license access is verified." : "No active purchase entitlement for your wallet."}</p>{access.download_path && <button className="block text-blue-700 underline" onClick={async () => { setAccessError(""); try { await downloadAsset(access.download_path!); } catch (err) { setAccessError(err instanceof Error ? err.message : "Download failed."); } }}>Download protected file</button>}{access.file_url && <a className="block text-blue-700 underline" target="_blank" rel="noreferrer" href={access.file_url}>Open asset file</a>}<p className="text-xs text-slate-500">{access.storage_notice}</p></>}{accessError && <p role="alert">{accessError}</p>}</section>}

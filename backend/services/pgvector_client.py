@@ -126,9 +126,10 @@ async def setup_tables():
             CREATE TABLE IF NOT EXISTS payment_recovery_events (
                 id BIGSERIAL PRIMARY KEY, order_id TEXT NOT NULL REFERENCES payment_orders(order_id),
                 action TEXT NOT NULL, reason TEXT NOT NULL,
-                actor TEXT NOT NULL DEFAULT CURRENT_USER, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                actor TEXT NOT NULL DEFAULT SESSION_USER, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         """)
+        await conn.execute("ALTER TABLE payment_recovery_events ALTER COLUMN actor SET DEFAULT SESSION_USER")
         await conn.execute("ALTER TABLE knowledge_assets ADD COLUMN IF NOT EXISTS summary TEXT DEFAULT ''")
         await conn.execute("CREATE INDEX IF NOT EXISTS assets_hash_idx ON knowledge_assets(blake3_hash)")
         await conn.execute("CREATE INDEX IF NOT EXISTS reviews_token_idx ON reviews(token_id)")

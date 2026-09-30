@@ -9,6 +9,8 @@ import { formatUnits, parseUnits } from "viem";
 import { polygonAmoy } from "viem/chains";
 import { marketplaceContract, mockUSDCContract } from "@/lib/blockchain/contracts";
 
+import { checkGas, confirmedReceipt, PurchaseCheckError } from "@/lib/blockchain/purchaseSafety";
+
 type Auction = readonly [bigint, bigint, bigint, `0x${string}`, `0x${string}`, boolean, boolean, number, number];
 
 export default function AuctionPanel({ tokenId, auctionId, canCreate, price }: {
@@ -32,6 +34,7 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price }: {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [transactionHash, setTransactionHash] = useState<`0x${string}` | null>(null);
   const [now, setNow] = useState(0);
   useEffect(() => { if (auctionId) setLastAuctionId(auctionId); }, [auctionId]);
   useEffect(() => {
@@ -55,25 +58,26 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price }: {
     try {
       if (chainId !== polygonAmoy.id) { await switchChainAsync({ chainId: polygonAmoy.id }); }
       async function send(contract: typeof marketplaceContract | typeof mockUSDCContract, functionName: string, args: readonly unknown[]) {
+        await checkGas(client!, contract, functionName, args, address!);
         const hash = await writeContractAsync({ ...contract, functionName, args, account: address, chainId: polygonAmoy.id });
+        setTransactionHash(hash);
         setStatus("Waiting for transaction confirmation…");
-        const receipt = await client!.waitForTransactionReceipt({ hash });
-        if (receipt.status !== "success") throw new Error("Transaction reverted. Refresh the auction and try again.");
+        await confirmedReceipt(client!, hash);
       }
       setStatus("Confirm in your wallet…");
       if (action === "bid") {
-        if (!/^\d+(\.\d{1,6})?$/.test(bid)) throw new Error("Enter a USDC amount with up to six decimal places.");
+        if (!/^\d+(\.\d{1,6})?$/.test(bid)) throw new PurchaseCheckError("Enter a USDC amount with up to six decimal places.");
         const amount = parseUnits(bid, 6);
-        if (amount < minimum) throw new Error(`Minimum bid is ${formatUnits(minimum, 6)} USDC.`);
+        if (amount < minimum) throw new PurchaseCheckError(`Minimum bid is ${formatUnits(minimum, 6)} USDC.`);
         const balance = await client.readContract({ ...mockUSDCContract, functionName: "balanceOf", args: [address] }) as bigint;
-        if (balance < amount) throw new Error("Insufficient USDC balance for this bid.");
+        if (balance < amount) throw new PurchaseCheckError("Insufficient USDC balance for this bid.");
         const allowance = await client.readContract({ ...mockUSDCContract, functionName: "allowance", args: [address, marketplaceContract.address] }) as bigint;
         if (allowance < amount) { setStatus("Approve USDC in your wallet…"); await send(mockUSDCContract, "approve", [marketplaceContract.address, amount]); }
         setStatus("Confirm your bid in your wallet…");
         await send(marketplaceContract, "placeBid", [resolvedId, amount]);
       } else if (action === "create") {
         const duration = Number(hours);
-        if (!Number.isInteger(duration) || duration < 1 || duration > 720) throw new Error("Choose a duration from 1 to 720 hours.");
+        if (!Number.isInteger(duration) || duration < 1 || duration > 720) throw new PurchaseCheckError("Choose a duration from 1 to 720 hours.");
         const block = await client.getBlock();
         await send(marketplaceContract, "createAuction", [tokenId, price, block.timestamp, block.timestamp + BigInt(duration * 3600), []]);
       } else {
@@ -83,8 +87,8 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price }: {
       setStatus(action === "bid" ? "Bid confirmed." : action === "create" ? "Auction created." : action === "end" ? "Auction finalized. The winner’s entitlement is recorded on-chain." : "Refund withdrawn.");
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
-      setError(/reject|denied/i.test(message) ? "Transaction cancelled in your wallet. You can retry." :
-        /USDC|Minimum bid|duration|decimal|reverted/.test(message) ? message : "Transaction failed. Check your network, USDC balance and POL for gas, then retry.");
+      setError(err instanceof PurchaseCheckError ? err.message : /reject|denied/i.test(message) ? "Transaction cancelled in your wallet. You can retry." :
+        "Transaction not verified. Check its status before retrying; a pending transaction may still complete.");
       setStatus("");
     } finally { setBusy(false); }
   }
@@ -92,6 +96,8 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price }: {
   if (!resolvedId && !canCreate && !refund) return null;
   return <section className="mt-5 space-y-3 rounded-lg border p-4" aria-label="Auction">
     <h3 className="font-semibold">Auction{resolvedId > 0n ? ` #${resolvedId}` : ""}</h3>
+    <p className="text-sm">Every auction transaction needs Amoy test POL for gas. Funding a wallet does not place or reserve a bid.</p>
+    <Link className="block underline" href="/funding">Add USDC (INR funding unavailable)</Link>
     {isError && <p role="alert">Unable to load auction state.</p>}
     {!!resolvedId && !auction && !isError && <p>Loading auction…</p>}
     {auction && <>
@@ -117,6 +123,7 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price }: {
       <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy} onClick={() => transact("refund")}>Withdraw bid refund</button>
     </>}
     {!address && <p>Connect your wallet to bid or finalize.</p>}
+    {transactionHash && <a className="block underline" target="_blank" rel="noreferrer" href={`https://amoy.polygonscan.com/tx/${transactionHash}`}>Check auction transaction status</a>}
     <p role="status">{status}</p>
     {error && <p className="text-red-600" role="alert">{error}</p>}
   </section>;

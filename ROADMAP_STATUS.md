@@ -170,3 +170,19 @@ transaction data or authorizes a refund. No contracts or addresses changed.
 Verification: 28 backend unittest checks (disposable database schemas and simulated
 provider/chain boundaries) and frontend production build/typecheck/lint passed.
 The existing optional pino-pretty warning remains. No live payment E2E was performed.
+
+## Funding readiness and handoff verification
+
+29 backend auth/payment/activity tests passed, including actual temporary PostgreSQL
+role grants, retained SESSION_USER identity through SET ROLE, and denial of audit
+rewrites, forged actor inserts and signed-transaction edits. The test creates/removes
+only its own disposable role and schema; real operator accounts were not provisioned.
+Three frontend test groups pass for fresh listing changes, fee/balance margin and
+canonical two-block receipts (reorg, disappearance, revert, replacement, shallow
+confirmation). Run `npm run test:purchase` using Node 24, or a Node version with
+native TypeScript stripping. Production build/typecheck/lint pass; optional existing
+pino-pretty warning remains. Browser checks show all five current marketplace assets,
+Buy with Crypto, POL guidance and the unavailable Add USDC route. No wallet signing
+was exercised. Live read-only preflight confirms the old marketplace has no funded
+settlement interface. See OWNER_HANDOFF.md for the exact remaining owner setup and
+engineering migration work; existing design decisions are not reopened.
