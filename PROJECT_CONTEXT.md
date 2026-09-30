@@ -135,3 +135,26 @@ Fiat checkout creation is serialized per account/asset to prevent duplicate orde
 pipeline passed. Read-only RPC still confirms funded settlement is not deployed.
 Razorpay is a test INR gateway; no INR-to-USDC converter is integrated. Settlement
 requires pre-funded test USDC. See PAYMENT_AUTH_VERIFICATION.md for setup and limits.
+
+## Roadmap audit continuation
+
+ROADMAP_STATUS.md now maps all 44 supplied items: 25 implemented/local, 9 partial,
+7 external rollout/E2E pending and 3 conditional research. Added PostgreSQL-backed
+duplicate detection with concurrent insert rejection; purchaser-only reviews;
+quality search filter; bounded fixed-price account activity; encrypted new files
+and revalidated downloads. Legacy public files and deployments remain unchanged.
+24 backend tests and frontend build pass. Live history RPC succeeded after honoring
+the current 10-block log-query limit. Complete earnings/auction indexing remains.
+CONTENT_MASTER_KEY was initialized in ignored backend/.env with init_content_key.py;
+back up securely and never overwrite for rotation without a key migration. No
+secret is committed. See audit report for diagnostic RPC-key rotation follow-up.
+The new services use existing cryptography (now explicitly in requirements), AES-GCM
+per-file keys and backend key wrapping, not Lit or post-quantum encryption.
+Slither is now available via isolated uv tooling. Payment effects were moved before
+external calls and royalty sum locals initialized. Final scan: 4 low timestamp and
+1 informational compiler-version finding; zero high/medium. 121 contract tests and
+TypeScript checks pass. See SLITHER_AUDIT.json and ROADMAP_STATUS.md for triage.
+Solidity interfaces/addresses are unchanged; the source changes are not deployed.
+Frontend Marketplace ABI was missing deployed hasPurchased/purchaseCount reads;
+these were added so entitlement-dependent UI can resolve. Funded methods remain
+deployment-gated in the backend.

@@ -84,13 +84,13 @@ def qubo_rerank(assets: list, scores: dict, top_k: int = 10) -> list:
     return (selected + remaining)[:top_k]
 
 
-async def quantum_enhanced_search(query: str, domain: str = None, max_price: int = None) -> list:
+async def quantum_enhanced_search(query: str, domain: str = None, max_price: int = None, min_quality: float = 0.4) -> list:
     from services.embedding import embed_query
     from services.pgvector_client import semantic_search
 
     # Step 1: Classical semantic search via pgvector (fast, ~20ms)
     query_vec = embed_query(query)
-    candidates = await semantic_search(query_vec, top_k=20, domain=domain, max_price=max_price)
+    candidates = await semantic_search(query_vec, top_k=20, domain=domain, max_price=max_price, min_quality=min_quality)
 
     if len(candidates) < 2:
         return candidates

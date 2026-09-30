@@ -52,7 +52,9 @@ title, summary/description, topic, tags, license and quality. Raw metadata JSON 
 BLAKE3 hashes are not rendered. Descriptions use a public backend endpoint, first
 checking stored catalog content and then fixed IPFS gateways; arbitrary URLs are
 not accepted. New uploads persist their summary. These are presentation changes:
-the underlying public IPFS/blockchain data remains public.
+the underlying historical public IPFS/blockchain data remains public. Subsequent
+roadmap work adds encrypted new uploads and authenticated downloads; see
+ROADMAP_STATUS.md for current storage behavior and key-backup requirements.
 
 ## Checks and limits
 

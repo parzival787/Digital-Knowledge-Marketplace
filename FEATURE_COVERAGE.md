@@ -6,6 +6,9 @@
 | --- | --- | --- |
 | Signup, login, session, logout | `/signup`, `/login`, `/account` | Username/password or configured Google OAuth; server-side sessions expire after 12 hours and logout revokes them |
 | Public asset description, `/api/assets/{token_id}/details` | Marketplace → View Details | Allowlisted title, summary, topic and tags; no raw metadata, file IDs or hashes |
+| Purchaser reviews, `/api/assets/{token_id}/reviews` | Marketplace → View Details | Public aggregate/pagination; verified purchasers can save/update one review |
+| Protected download, `/api/assets/{token_id}/download` | Marketplace → Check my access → Download | Rechecks on-chain access; decrypts and verifies new encrypted files |
+| Account blockchain activity, `/api/account/activity` | Dashboard → On-chain purchases and sales | Fixed-price history per bounded RPC block page; gross sales, not lifetime net earnings |
 | Wallet challenge and signature verification | `/account` | Logged-in account; single-use five-minute challenge; one verified wallet per account |
 | Document analysis, `/api/analyze` | `/mint`, step 1 | Login; file size limit; AI quality feedback |
 | Upload, `/api/upload-ipfs` | `/mint`, step 2 | Verified wallet; multipart metadata; upload is saved under the account |
@@ -26,7 +29,7 @@ Provider webhooks and background settlement reconciliation are machine-to-machin
 operations; they are reflected in payment status instead of exposed as buttons.
 Mock payments remain an API/test facility and never grant entitlement. Contract
 owner administration (pause, splitter configuration) is not exposed to ordinary
-users. Reviews are only a database table: there is no existing review API to wire.
+users. Search includes a minimum quality filter alongside domain and price.
 
 ## Security and setup limits
 
@@ -41,8 +44,10 @@ users. Reviews are only a database table: there is no existing review API to wir
 - Existing uploads/orders have no account owner. They stay unclaimed and are not
   assigned by a supplied wallet address. A reviewed migration is required to adopt
   legacy private records. Existing public marketplace listings remain browsable.
-- IPFS uploads are public. Login protects account data and operations, not the
-  confidentiality of already published files. Encrypted storage is separate work.
+- New files are AES-GCM encrypted before IPFS upload; authenticated downloads
+  recheck on-chain entitlement and integrity. Public catalog metadata remains
+  readable. Legacy public files remain public. Back up CONTENT_MASTER_KEY securely;
+  see ROADMAP_STATUS.md for server-managed encryption limits and key operations.
 - No password recovery, MFA, wallet reassignment or independent security audit is
   implemented. Password signup uses usernames; Google requires a verified email
   and identifies accounts by stable subject, without automatically merging accounts.

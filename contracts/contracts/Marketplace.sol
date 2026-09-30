@@ -351,7 +351,7 @@ contract Marketplace is
         if (length > MAX_RECIPIENTS)
     revert TooManyRecipients();
 
-        uint256 totalShares;
+        uint256 totalShares = 0;
 
         for (uint256 i = 0; i < length;) {
 
@@ -482,6 +482,9 @@ contract Marketplace is
 
         delete tokenToListing[tokenId];
 
+        // Entitlement rolls back with the transaction if payment/distribution fails.
+        purchaseCount[tokenId][buyer] += 1;
+
         //------------------------------------------------------------
         // Interactions
         //------------------------------------------------------------
@@ -497,10 +500,6 @@ contract Marketplace is
             listingRecipients[listingId],
             price
         );
-
-        // Record the buyer's license/purchase entitlement.
-        // The ERC721 NFT remains owned by the original creator.
-        purchaseCount[tokenId][buyer] += 1;
 
         emit PurchaseCompleted(
             listingId,
@@ -557,7 +556,7 @@ contract Marketplace is
         if (length > MAX_RECIPIENTS)
     revert TooManyRecipients();
 
-        uint256 totalShares;
+        uint256 totalShares = 0;
 
         for (uint256 i = 0; i < length;) {
 
@@ -657,16 +656,6 @@ contract Marketplace is
         }
 
         //------------------------------------------------------------
-        // Transfer bidder funds
-        //------------------------------------------------------------
-
-        usdc.safeTransferFrom(
-            msg.sender,
-            address(this),
-            amount
-        );
-
-        //------------------------------------------------------------
         // Credit the previous highest bidder's refund (pull pattern)
         //------------------------------------------------------------
 
@@ -690,6 +679,9 @@ contract Marketplace is
                 timestamp: uint40(block.timestamp)
             })
         );
+
+        // All effects precede token callbacks and revert if the transfer fails.
+        usdc.safeTransferFrom(msg.sender, address(this), amount);
 
         emit BidPlaced(
             auction.tokenId,
@@ -762,6 +754,9 @@ contract Marketplace is
             return;
         }
 
+        // Record entitlement before external calls; failed payouts revert it.
+        purchaseCount[auction.tokenId][auction.highestBidder] += 1;
+
         //------------------------------------------------------------
         // Transfer winning bid to RoyaltySplitter
         //------------------------------------------------------------
@@ -780,14 +775,6 @@ contract Marketplace is
             auctionRecipients[auctionId],
             auction.highestBid
         );
-
-        //------------------------------------------------------------
-        // Transfer NFT
-        //------------------------------------------------------------
-
-        // Record the winning bidder's license/purchase entitlement.
-        // The ERC721 NFT remains owned by the original creator.
-        purchaseCount[auction.tokenId][auction.highestBidder] += 1;
 
         emit AuctionEnded(
             auction.tokenId,

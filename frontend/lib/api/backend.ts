@@ -48,7 +48,7 @@ export async function uploadAssetToIPFS(file: File, metadata: Record<string, unk
   const body = new FormData(); body.append("file", file); body.append("metadata_json", JSON.stringify(metadata));
   return api("/api/upload-ipfs", { method: "POST", body });
 }
-export async function searchAssets(query: string, domain?: string, max_price?: number): Promise<SearchResponse> {
-  return api("/api/search", { method: "POST", body: JSON.stringify({ query, domain: domain || undefined, max_price }) });
+export async function searchAssets(query: string, domain?: string, max_price?: number, min_quality = 0.4): Promise<SearchResponse> {
+  return api("/api/search", { method: "POST", body: JSON.stringify({ query, domain: domain || undefined, max_price, min_quality }) });
 }
 export async function checkBackendHealth() { return api("/health"); }

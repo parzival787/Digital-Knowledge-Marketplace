@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useVerifiedWallet } from "@/providers/AuthProvider";
-import { api } from "@/lib/api/client";
+import { api, downloadAsset } from "@/lib/api/client";
 import { useEffect, useState } from "react";
 
 import {
@@ -17,6 +17,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { polygonAmoy } from "viem/chains";
 import AuctionPanel from "./AuctionPanel";
 import Web2Checkout from "./Web2Checkout";
+import Reviews from "./Reviews";
 import { marketplaceContract, mockUSDCContract } from "@/lib/blockchain/contracts";
 
 import {
@@ -73,7 +74,7 @@ export default function AssetCard({
   const { writeContractAsync } = useWriteContract();
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState("");
-  const [access, setAccess] = useState<{access_granted: boolean; file_url: string | null; storage_notice: string} | null>(null);
+  const [access, setAccess] = useState<{access_granted: boolean; file_url: string | null; download_path: string | null; storage_notice: string} | null>(null);
   const [accessError, setAccessError] = useState("");
   const [showDetails, setShowDetails] = useState(false);
 
@@ -851,7 +852,7 @@ export default function AssetCard({
 
           {purchaseError && (
             <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-600">
-              {purchaseError.message}
+              Purchase failed or was cancelled. Check your balances and retry.
             </div>
           )}
 
@@ -862,7 +863,7 @@ export default function AssetCard({
       {connectedAddress && chainId !== polygonAmoy.id && <button className="mt-4 rounded border p-2" onClick={() => switchChain({ chainId: polygonAmoy.id })}>Switch to Polygon Amoy</button>}
       {purchased === true && <p className="mt-4 text-green-700" role="status">Purchase entitlement verified on-chain.</p>}
       {verified && connectedAddress && !isOwner && <Web2Checkout key={connectedAddress} tokenId={tokenId} buyer={connectedAddress} canStart={!!isListed && !purchased && asset.active} />}
-      {verified && <section className="mt-4 space-y-2"><button className="rounded border p-2" onClick={async () => { setAccessError(""); try { setAccess(await api(`/api/assets/${tokenId}/access`)); } catch (err) { setAccessError(err instanceof Error ? err.message : "Access check failed."); } }}>Check my access</button>{access && <><p>{access.access_granted ? "Your license access is verified." : "No active purchase entitlement for your wallet."}</p>{access.file_url && <a className="block text-blue-700 underline" target="_blank" rel="noreferrer" href={access.file_url}>Open asset file</a>}<p className="text-xs text-slate-500">{access.storage_notice}</p></>}{accessError && <p role="alert">{accessError}</p>}</section>}
+      {verified && <section className="mt-4 space-y-2"><button className="rounded border p-2" onClick={async () => { setAccessError(""); try { setAccess(await api(`/api/assets/${tokenId}/access`)); } catch (err) { setAccessError(err instanceof Error ? err.message : "Access check failed."); } }}>Check my access</button>{access && <><p>{access.access_granted ? "Your license access is verified." : "No active purchase entitlement for your wallet."}</p>{access.download_path && <button className="block text-blue-700 underline" onClick={async () => { setAccessError(""); try { await downloadAsset(access.download_path!); } catch (err) { setAccessError(err instanceof Error ? err.message : "Download failed."); } }}>Download protected file</button>}{access.file_url && <a className="block text-blue-700 underline" target="_blank" rel="noreferrer" href={access.file_url}>Open asset file</a>}<p className="text-xs text-slate-500">{access.storage_notice}</p></>}{accessError && <p role="alert">{accessError}</p>}</section>}
       <AuctionPanel tokenId={tokenId} auctionId={auctionId} price={asset.priceUSDC} canCreate={isOwner && !isListed && asset.active} />
 
       {/* ======================================================
@@ -910,6 +911,7 @@ export default function AssetCard({
             </div>
           )}
 
+          <Reviews tokenId={tokenId} canReview={verified && purchased === true && !isOwner} />
           {metadata && (
             <div className="mt-4 space-y-4 text-sm">
               <h4 className="text-lg font-semibold">{typeof metadata.title === "string" && metadata.title.trim() ? metadata.title : "Knowledge asset"}</h4>

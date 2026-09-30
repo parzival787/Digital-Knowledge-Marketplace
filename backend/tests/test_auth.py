@@ -16,6 +16,9 @@ import main
 
 class AuthTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        config = patch.dict("os.environ", {"CONTENT_MASTER_KEY": "dGVzdC1vbmx5LWtleS0zMi1ieXRlcy1sb25nLTAwMDA="})
+        config.start()
+        self.addCleanup(config.stop)
         self.schema = "auth_test_" + uuid.uuid4().hex
         self.connect = db.get_conn
         conn = await self.connect()
@@ -159,7 +162,8 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(invalid.status_code, 422)
         meta = {"title": "Example", "summary": "Example document", "tags": ["test"], "domain": "other", "recommended_price_usdc": 7, "quality_score": 0.8}
         original_client = httpx.AsyncClient
-        transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"data": {"cid": "test-cid"}}))
+        uploaded = []
+        transport = httpx.MockTransport(lambda request: uploaded.append(request.content) or httpx.Response(200, json={"data": {"cid": "test-cid"}}))
         with patch.dict("os.environ", {"PINATA_JWT": "test-only"}), patch.object(main, "generate_embedding", return_value=[0.1]*384), patch.object(main.fraud_detector, "check_upload", return_value={"is_fraud": False}), patch.object(main.httpx, "AsyncClient", side_effect=lambda **kwargs: original_client(transport=transport, **kwargs)):
             response = await self.client.post("/api/upload-ipfs", files=files, data={"metadata_json": json.dumps(meta)})
         self.assertEqual(response.status_code, 200, response.text)
@@ -169,6 +173,10 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(row["title"], "Example")
         self.assertEqual(row["price_usdc"], 7)
         self.assertEqual(row["user_id"], user["id"])
+        self.assertNotIn(files["file"][1], uploaded[0])
+        self.assertTrue(row["encrypted_key"])
+        self.assertNotIn(row["encrypted_key"].encode(), uploaded[1])
+        self.assertNotIn(row["encrypted_key"], response.text)
 
     async def test_google_code_flow_creates_and_reuses_separate_account(self):
         from urllib.parse import urlparse, parse_qs, urlencode
@@ -227,6 +235,103 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(set(filtered), {"title", "summary", "domain", "tags"})
         self.assertNotIn("secret", str(filtered))
         self.assertEqual(filtered["tags"], ["topic"])
+
+    async def test_persistent_duplicate_detection_concurrency_and_retry(self):
+        import asyncio
+        from services.fraud_detector import QuantumFraudDetector
+        from services.quantum_hash import quantum_hash
+        content = b"Persistent duplicate test content " * 10
+        detector = QuantumFraudDetector()
+        # Checking before a failed upload does not poison retries.
+        self.assertFalse((await detector.check_upload(content))["is_fraud"])
+        self.assertFalse((await detector.check_upload(content))["is_fraud"])
+        args = dict(title="Test", domain="science", tags=[], quality=0.8, price_usdc=5,
+                    blake3_hash=quantum_hash(content), embedding=[0.1]*384)
+        results = await asyncio.gather(db.insert_embedding(**args), db.insert_embedding(**args), return_exceptions=True)
+        self.assertEqual(sum(isinstance(r, dict) for r in results), 1)
+        self.assertEqual(sum(isinstance(r, db.DuplicateUploadError) for r in results), 1)
+        self.assertTrue((await QuantumFraudDetector().check_upload(content))["is_fraud"])
+
+    async def test_protected_download_checks_entitlement_and_ciphertext(self):
+        from services.content_security import seal, unseal
+        from services.quantum_hash import quantum_hash
+        from cryptography.exceptions import InvalidTag
+        data = b"Private knowledge file " * 30
+        digest = quantum_hash(data)
+        encrypted, wrapped = seal(data, digest)
+        self.assertNotIn(data, encrypted)
+        self.assertEqual(unseal(encrypted, wrapped, digest), data)
+        with self.assertRaises(InvalidTag):
+            unseal(encrypted, wrapped, "0"*64)
+        await self.signup()
+        await self.verify()
+        cid = "bafy" + "a" * 40
+        conn = await self.isolated()
+        await conn.execute("INSERT INTO knowledge_assets(vector_id,file_cid,metadata_cid,encrypted_key,blake3_hash,original_filename) VALUES ('private',$1,'meta',$2,$3,'research.txt')", cid,wrapped,digest)
+        await conn.close()
+        asset = {"creator": Account.create().address,"active":True,"ipfs_cid":cid,"metadata_cid":"meta"}
+        original_client = httpx.AsyncClient
+        with patch.object(main,"get_knowledge_asset",return_value=asset), patch.object(main,"has_purchased",return_value=False) as purchased, patch.object(main,"get_purchase_count",return_value=1):
+            self.assertEqual((await self.client.get("/api/assets/1/download")).status_code,403)
+            purchased.return_value = True
+            access = (await self.client.get("/api/assets/1/access")).json()
+            self.assertIsNone(access["file_url"])
+            self.assertEqual(access["download_path"],"/api/assets/1/download")
+            for content, expected in [(encrypted,200),(encrypted[:-1]+bytes([encrypted[-1]^1]),503)]:
+                transport = httpx.MockTransport(lambda r: httpx.Response(200,content=content))
+                with patch.object(main.httpx,"AsyncClient",side_effect=lambda **kw: original_client(transport=transport,**kw)):
+                    response = await self.client.get("/api/assets/1/download")
+                self.assertEqual(response.status_code,expected)
+                if expected == 200:
+                    self.assertEqual(response.content,data)
+                    self.assertEqual(response.headers["cache-control"],"no-store")
+                    self.assertIn("research.txt",response.headers["content-disposition"])
+            asset["active"] = False
+            self.assertEqual((await self.client.get("/api/assets/1/download")).status_code,403)
+        dashboard = (await self.client.get("/api/account/dashboard")).text
+        self.assertNotIn(wrapped,dashboard)
+
+    async def test_reviews_require_purchase_and_update_one_rating(self):
+        import asyncio
+        from services import reviews
+        self.assertEqual((await self.client.post("/api/assets/1/reviews", json={"rating": 5})).status_code, 401)
+        await self.signup()
+        await self.verify()
+        asset = {"creator": Account.create().address}
+        with patch.object(reviews.blockchain, "get_knowledge_asset", return_value=asset), patch.object(reviews.blockchain, "has_purchased", return_value=False) as bought:
+            self.assertEqual((await self.client.post("/api/assets/1/reviews", json={"rating": 5})).status_code, 403)
+            bought.return_value = True
+            self.assertEqual((await self.client.post("/api/assets/1/reviews", json={"rating": 6})).status_code, 422)
+            self.assertEqual((await self.client.post("/api/assets/1/reviews", json={"rating": True})).status_code, 422)
+            results = await asyncio.gather(*[self.client.post("/api/assets/1/reviews", json={"rating": 4, "review_text": "Useful guide"}) for _ in range(2)])
+            self.assertTrue(all(r.status_code == 200 for r in results))
+            await self.client.post("/api/assets/1/reviews", json={"rating": 3, "review_text": "Updated"})
+            data = (await self.client.get("/api/assets/1/reviews")).json()
+            self.assertEqual(data["count"], 1)
+            self.assertEqual(data["average"], 3)
+            self.assertEqual(data["reviews"][0]["review_text"], "Updated")
+            self.assertNotIn("buyer_address", str(data))
+            asset["creator"] = self.wallet.address
+            self.assertEqual((await self.client.post("/api/assets/1/reviews", json={"rating": 5})).status_code, 403)
+
+    async def test_search_filters_and_activity_account_boundary(self):
+        from services import activity
+        conn = await self.isolated()
+        try:
+            for index, domain, quality, price in [(1,"science",0.9,5),(2,"science",0.5,5),(3,"other",0.9,5),(4,"science",0.9,20)]:
+                await conn.execute("INSERT INTO knowledge_assets(vector_id,title,domain,quality,price_usdc,embedding) VALUES ($1,'Test',$2,$3,$4,$5)", str(index),domain,quality,price,[0.1]*384)
+        finally:
+            await conn.close()
+        results = await db.semantic_search([0.1]*384,domain="science",max_price=10,min_quality=0.8)
+        self.assertEqual([row["vector_id"] for row in results], ["1"])
+        self.assertEqual((await self.client.post("/api/search",json={"query":"test","min_quality":1.1})).status_code,422)
+        self.assertEqual((await self.client.get("/api/account/activity")).status_code,401)
+        await self.signup()
+        await self.verify()
+        with patch.object(activity,"account_activity",return_value={"activity":[]}) as history:
+            response = await self.client.get("/api/account/activity?before_block=100&wallet=attacker")
+            self.assertEqual(response.status_code,200)
+            history.assert_called_once_with(self.wallet.address,100)
 
     async def test_google_rejects_missing_config_state_cookie_expiry_and_unverified_identity(self):
         from urllib.parse import urlparse, parse_qs

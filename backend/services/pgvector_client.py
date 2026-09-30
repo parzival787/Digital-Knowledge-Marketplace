@@ -4,6 +4,10 @@ import numpy as np
 from pgvector.asyncpg import register_vector
 import uuid
 
+
+class DuplicateUploadError(ValueError):
+    pass
+
 DB_URL = os.environ.get(
     "DATABASE_URL",
     "postgresql://postgres:devpassword@localhost:5432/dkm"
@@ -111,6 +115,10 @@ async def setup_tables():
         await conn.execute("ALTER TABLE payment_orders ADD COLUMN IF NOT EXISTS user_id BIGINT")
         await conn.execute("ALTER TABLE knowledge_assets ADD COLUMN IF NOT EXISTS user_id BIGINT")
         await conn.execute("ALTER TABLE knowledge_assets ADD COLUMN IF NOT EXISTS summary TEXT DEFAULT ''")
+        await conn.execute("CREATE INDEX IF NOT EXISTS assets_hash_idx ON knowledge_assets(blake3_hash)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS reviews_token_idx ON reviews(token_id)")
+        await conn.execute("ALTER TABLE knowledge_assets ADD COLUMN IF NOT EXISTS encrypted_key TEXT")
+        await conn.execute("ALTER TABLE knowledge_assets ADD COLUMN IF NOT EXISTS original_filename TEXT")
 
         await conn.execute("""
             CREATE INDEX IF NOT EXISTS assets_quality_idx
@@ -142,11 +150,18 @@ async def insert_embedding(
     metadata_cid: str = "",
     user_id: int | None = None,
     summary: str = "",
+    encrypted_key: str | None = None,
+    original_filename: str | None = None,
 ):
     conn = await get_conn()
 
     try:
         vector_id = str(uuid.uuid4())
+
+        # Serialize identical content across workers without deleting legacy duplicates.
+        await conn.execute("SELECT pg_advisory_lock(hashtextextended($1,0))", "upload:" + blake3_hash)
+        if blake3_hash and await conn.fetchval("SELECT 1 FROM knowledge_assets WHERE blake3_hash=$1 LIMIT 1", blake3_hash):
+            raise DuplicateUploadError("This file has already been uploaded")
 
         row = await conn.fetchrow(
             """
@@ -160,10 +175,10 @@ async def insert_embedding(
                 quality,
                 price_usdc,
                 blake3_hash,
-                embedding, user_id, summary
+                embedding, user_id, summary, encrypted_key, original_filename
             )
             VALUES (
-                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12
+                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14
             )
             RETURNING id, vector_id;
             """,
@@ -179,6 +194,8 @@ async def insert_embedding(
             np.array(embedding),
             user_id,
             summary,
+            encrypted_key,
+            original_filename,
         )
 
         return dict(row)
@@ -190,6 +207,7 @@ async def semantic_search(
     top_k: int = 20,
     domain: str = None,
     max_price: int = None,
+    min_quality: float = 0.4,
 ) -> list:
 
     conn = await get_conn()
@@ -197,8 +215,8 @@ async def semantic_search(
     try:
         vec = np.array(query_vec, dtype=np.float32)
 
-        where_clauses = ["quality >= 0.4"]
-        params = [vec]
+        where_clauses = ["quality >= $2"]
+        params = [vec, max(0.4, min_quality)]
 
         if domain:
             where_clauses.append(f"domain = ${len(params) + 1}")

@@ -1,6 +1,7 @@
 "use client";
 
 import { useReadContract } from "wagmi";
+import { polygonAmoy } from "viem/chains";
 
 import { knowledgeAssetContract } from "@/lib/blockchain/contracts";
 
@@ -9,9 +10,9 @@ export default function BlockchainTest() {
     data,
     isLoading,
     isError,
-    error,
   } = useReadContract({
     ...knowledgeAssetContract,
+    chainId: polygonAmoy.id,
     functionName: "totalMinted",
   });
 
@@ -24,7 +25,6 @@ export default function BlockchainTest() {
   }
 
   if (isError) {
-    console.error("KnowledgeAsset read error:", error);
 
     return (
       <div className="mt-8 text-center text-red-500">

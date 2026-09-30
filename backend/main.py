@@ -2,7 +2,7 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Depends
 from pydantic import BaseModel, Field
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 import os, json, httpx, asyncio
 from dotenv import load_dotenv
@@ -16,6 +16,7 @@ from services.pgvector_client import (
     setup_tables,
     insert_embedding,
     get_asset_by_token_id,
+    DuplicateUploadError,
 )
 from services.quantum_hash import quantum_hash
 from services.quantum_search import quantum_enhanced_search
@@ -30,12 +31,20 @@ from services.payments.models import CreatePaymentRequest, ConfirmPaymentRequest
 from services.payments.service import payment_service
 from services.auth import router as auth_router, setup_auth, current_user, wallet_user, ORIGIN
 from services.pgvector_client import get_conn
+from services.reviews import router as reviews_router
+from services.content_security import seal, unseal, master_key
 
 
 
 
 app = FastAPI(title="DKM API", version="1.0.0")
 app.include_router(auth_router)
+app.include_router(reviews_router)
+
+
+@app.exception_handler(DuplicateUploadError)
+async def duplicate_upload(request, exc):
+    return JSONResponse(status_code=409, content={"detail": "This file has already been uploaded. Check your dashboard to continue an existing upload."})
 
 
 @app.exception_handler(RequestValidationError)
@@ -60,6 +69,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 
@@ -129,6 +139,11 @@ async def health():
     checks["database_url"] = bool(
         os.environ.get("DATABASE_URL")
     )
+    try:
+        master_key()
+        checks["protected_storage_key"] = True
+    except ValueError:
+        checks["protected_storage_key"] = False
 
     all_ok = all(
         v for k, v in checks.items()
@@ -194,7 +209,7 @@ async def upload_ipfs(
     # Fraud detection
     # ---------------------------------------------------------
 
-    fraud = fraud_detector.check_upload(
+    fraud = await fraud_detector.check_upload(
         data,
         embedding
     )
@@ -204,6 +219,12 @@ async def upload_ipfs(
             422,
             f"Upload rejected: {fraud['reason']}"
         )
+
+    content_hash = quantum_hash(data)
+    try:
+        protected_data, encrypted_key = seal(data, content_hash)
+    except ValueError:
+        raise HTTPException(503, "Protected storage needs configuration before uploading") from None
 
     # ---------------------------------------------------------
     # Upload FILE to Pinata
@@ -221,9 +242,9 @@ async def upload_ipfs(
 
         files = {
             "file": (
-                file.filename or "knowledge_asset",
-                data,
-                file.content_type or "application/octet-stream",
+                "knowledge-asset.enc",
+                protected_data,
+                "application/octet-stream",
             )
         }
 
@@ -244,7 +265,6 @@ async def upload_ipfs(
 
         pinata_response = r.json()
 
-        print("PINATA FILE RESPONSE:", pinata_response)
 
         file_cid = pinata_response["data"]["cid"]
 
@@ -255,6 +275,7 @@ async def upload_ipfs(
     meta["file_cid"] = file_cid
 
     meta["blake3_hash"] = quantum_hash(data)
+    meta["storage"] = "encrypted-v1"
 
     meta_bytes = json.dumps(meta).encode()
 
@@ -289,10 +310,6 @@ async def upload_ipfs(
 
         metadata_response = r.json()
 
-        print(
-            "PINATA METADATA RESPONSE:",
-            metadata_response
-        )
 
         metadata_cid = metadata_response["data"]["cid"]
 
@@ -317,6 +334,8 @@ async def upload_ipfs(
     metadata_cid=metadata_cid,
     user_id=user["id"],
     summary=meta.get("summary", ""),
+    encrypted_key=encrypted_key,
+    original_filename=(file.filename or "knowledge-asset.bin").replace("\\", "/").rsplit("/", 1)[-1][:200],
 )
 
     # ---------------------------------------------------------
@@ -334,6 +353,7 @@ class SearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=2000)
     domain: str | None = Field(default=None, max_length=100)
     max_price: int | None = Field(default=None, ge=0, le=1000000)
+    min_quality: float = Field(default=0.4, ge=0.4, le=1)
 
 
 async def read_upload(file):
@@ -349,7 +369,7 @@ async def read_upload(file):
 async def search(body: SearchRequest):
     if not body.query.strip():
         raise HTTPException(400, "Enter a search query")
-    results = await quantum_enhanced_search(body.query.strip(), domain=body.domain, max_price=body.max_price)
+    results = await quantum_enhanced_search(body.query.strip(), domain=body.domain, max_price=body.max_price, min_quality=body.min_quality)
     return {"query": body.query, "results": results, "count": len(results)}
 
 
@@ -365,10 +385,57 @@ async def check_asset_access(token_id: int, user=Depends(wallet_user)):
         raise HTTPException(503, "Could not verify this asset on-chain. Retry shortly.") from None
     creator = onchain["creator"].lower() == user["wallet_address"].lower()
     granted = bool(onchain["active"] and (purchased or creator))
+    conn = await get_conn()
+    try:
+        protected = bool(await conn.fetchval("SELECT encrypted_key IS NOT NULL FROM knowledge_assets WHERE file_cid=$1 AND metadata_cid=$2 ORDER BY created_at DESC LIMIT 1", onchain["ipfs_cid"], onchain["metadata_cid"]))
+    finally:
+        await conn.close()
     return {"token_id": token_id, "wallet_address": user["wallet_address"],
             "has_purchased": purchased, "purchase_count": count, "access_granted": granted,
-            "file_url": "https://ipfs.io/ipfs/" + onchain["ipfs_cid"] if granted else None,
-            "storage_notice": "Files on public IPFS are publicly retrievable; entitlement is a license record, not encryption."}
+            "file_url": "https://ipfs.io/ipfs/" + onchain["ipfs_cid"] if granted and not protected else None,
+            "download_path": f"/api/assets/{token_id}/download" if granted and protected else None,
+            "storage_notice": "Encrypted file; downloading requires an active on-chain entitlement or creator access." if protected else "Legacy public file: anyone with its IPFS address can retrieve it."}
+
+
+@app.get("/api/assets/{token_id}/download")
+async def download_asset(token_id: int, user=Depends(wallet_user)):
+    import re
+    from urllib.parse import quote
+    from cryptography.exceptions import InvalidTag
+    access = await check_asset_access(token_id, user)
+    if not access["access_granted"]:
+        raise HTTPException(403, "Purchase this asset before downloading")
+    if not access["download_path"]:
+        raise HTTPException(409, "This legacy asset uses its public file link")
+    try:
+        asset = await asyncio.to_thread(get_knowledge_asset, token_id)
+    except Exception:
+        raise HTTPException(503, "Could not verify asset content") from None
+    conn = await get_conn()
+    try:
+        row = await conn.fetchrow("SELECT encrypted_key,blake3_hash,original_filename FROM knowledge_assets WHERE file_cid=$1 AND metadata_cid=$2 AND encrypted_key IS NOT NULL ORDER BY created_at DESC LIMIT 1", asset["ipfs_cid"], asset["metadata_cid"])
+    finally:
+        await conn.close()
+    if not row or not re.fullmatch(r"[A-Za-z0-9]{20,100}", asset["ipfs_cid"]):
+        raise HTTPException(503, "Protected file is unavailable")
+    async with httpx.AsyncClient(timeout=30) as client:
+        for gateway in ("https://ipfs.io/ipfs/", "https://gateway.pinata.cloud/ipfs/"):
+            try:
+                async with client.stream("GET", gateway + asset["ipfs_cid"]) as response:
+                    response.raise_for_status()
+                    ciphertext = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        ciphertext.extend(chunk)
+                        if len(ciphertext) > 20 * 1024 * 1024 + 28:
+                            raise ValueError("File too large")
+                data = unseal(bytes(ciphertext), row["encrypted_key"], row["blake3_hash"])
+                if quantum_hash(data) != row["blake3_hash"]:
+                    raise ValueError("Integrity mismatch")
+                filename = quote(row["original_filename"] or f"knowledge-asset-{token_id}.bin", safe="")
+                return Response(data, media_type="application/octet-stream", headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+            except (httpx.HTTPError, ValueError, InvalidTag):
+                continue
+    raise HTTPException(503, "Could not retrieve and verify this file. Retry shortly.")
 
 
 def asset_description(metadata):
@@ -480,6 +547,25 @@ async def latest_payment(token_id: int, user=Depends(current_user)):
         return {"order": PaymentOrder.model_validate(dict(row)).model_dump() if row else None}
     finally:
         await conn.close()
+
+
+@app.get("/api/account/activity")
+async def activity(before_block: int | None = None, user=Depends(wallet_user)):
+    if before_block is not None and before_block < 0:
+        raise HTTPException(400, "Invalid block number")
+    from services.activity import account_activity
+    try:
+        result = await asyncio.to_thread(account_activity, user["wallet_address"], before_block)
+    except Exception:
+        raise HTTPException(503, "Blockchain history is unavailable. Retry or choose an earlier block.") from None
+    conn = await get_conn()
+    try:
+        for item in result["activity"]:
+            method = await conn.fetchval("SELECT payment_method FROM payment_orders WHERE lower(settlement_tx_hash)=$1", item["transaction_hash"].lower())
+            item["payment_route"] = method if method in ("upi", "card") else "on-chain"
+    finally:
+        await conn.close()
+    return result
 
 
 async def require_order_owner(order_id, user):
