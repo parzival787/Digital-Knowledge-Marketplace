@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api/client";
 import { useAuth } from "@/providers/AuthProvider";
 
@@ -11,8 +11,23 @@ export default function AuthForm({ signup = false }: { signup?: boolean }) {
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [googleAvailable, setGoogleAvailable] = useState<boolean | null>(null);
+  useEffect(() => {
+    api<{google: boolean}>("/api/auth/methods").then(value => setGoogleAvailable(value.google)).catch(() => setGoogleAvailable(false));
+    if (new URLSearchParams(window.location.search).has("google_error")) {
+      setError("Google sign-in was cancelled, expired or could not be verified. Please try again.");
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
   const { refresh } = useAuth();
   const router = useRouter();
+  async function googleLogin() {
+    setBusy(true); setError("");
+    try {
+      const result = await api<{url: string}>("/api/auth/google/start", {method: "POST"});
+      window.location.assign(result.url);
+    } catch (err) { setError(err instanceof Error ? err.message : "Google sign-in is unavailable."); setBusy(false); }
+  }
   async function submit(event: React.FormEvent) {
     event.preventDefault(); setError("");
     if (signup && password !== confirm) { setError("Passwords do not match."); return; }
@@ -24,9 +39,12 @@ export default function AuthForm({ signup = false }: { signup?: boolean }) {
     finally { setBusy(false); }
   }
   return <main className="mx-auto grid max-w-5xl gap-10 px-6 py-16 md:grid-cols-2">
-    <section className="rounded-2xl bg-slate-950 p-8 text-white"><p className="text-sm uppercase tracking-widest text-blue-300">DKM / Your workspace</p><h1 className="mt-6 text-4xl font-bold">{signup ? "Start sharing knowledge." : "Welcome back."}</h1><p className="mt-6 text-slate-300">Keep your uploads and payment history in your own account. Link your wallet by signing a verification message.</p><p className="mt-6 text-sm text-slate-400">Your password signs you into DKM. Your wallet separately authorizes blockchain transactions.</p></section>
+    <section className="rounded-2xl bg-slate-950 p-8 text-white"><p className="text-sm uppercase tracking-widest text-blue-300">DKM / Your workspace</p><h1 className="mt-6 text-4xl font-bold">{signup ? "Start sharing knowledge." : "Welcome back."}</h1><p className="mt-6 text-slate-300">Keep your uploads and payment history in your own account. Link your wallet by signing a verification message.</p><p className="mt-6 text-sm text-slate-400">Sign in with Google or a password. Your wallet separately authorizes blockchain transactions.</p></section>
     <form onSubmit={submit} className="space-y-5 rounded-2xl border p-8">
       <h2 className="text-2xl font-semibold">{signup ? "Create an account" : "Log in"}</h2>
+      <button type="button" onClick={googleLogin} disabled={busy || !googleAvailable} className="w-full rounded-lg border border-slate-300 bg-white p-3 font-medium text-slate-800 disabled:opacity-50">Continue with Google</button>
+      {googleAvailable === false && <p className="text-sm text-slate-500">Google sign-in is awaiting setup. You can use a password below.</p>}
+      <p className="text-center text-sm text-slate-500">or continue with a password</p>
       <label className="block">Username<input className="mt-2 w-full rounded-lg border p-3" autoComplete="username" required minLength={3} maxLength={40} pattern="[a-zA-Z0-9_]{3,40}" value={username} onChange={e => setUsername(e.target.value)} /></label>
       <p className="text-xs text-slate-500">3–40 letters, numbers or underscores.</p>
       <label className="block">Password<input type="password" className="mt-2 w-full rounded-lg border p-3" autoComplete={signup ? "new-password" : "current-password"} required minLength={12} maxLength={128} value={password} onChange={e => setPassword(e.target.value)} /></label>

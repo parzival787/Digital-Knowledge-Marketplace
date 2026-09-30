@@ -316,6 +316,7 @@ async def upload_ipfs(
     file_cid=file_cid,
     metadata_cid=metadata_cid,
     user_id=user["id"],
+    summary=meta.get("summary", ""),
 )
 
     # ---------------------------------------------------------
@@ -368,6 +369,58 @@ async def check_asset_access(token_id: int, user=Depends(wallet_user)):
             "has_purchased": purchased, "purchase_count": count, "access_granted": granted,
             "file_url": "https://ipfs.io/ipfs/" + onchain["ipfs_cid"] if granted else None,
             "storage_notice": "Files on public IPFS are publicly retrievable; entitlement is a license record, not encryption."}
+
+
+def asset_description(metadata):
+    # Explicit public catalog fields, never a dump of file IDs, hashes or JSON.
+    title = metadata.get("title")
+    summary = metadata.get("summary") or metadata.get("description")
+    domain = metadata.get("domain")
+    return {
+        "title": title[:200] if isinstance(title, str) and title.strip() else "Knowledge asset",
+        "summary": summary[:5000] if isinstance(summary, str) and summary.strip() else "The creator has not provided a description yet.",
+        "domain": domain[:100] if isinstance(domain, str) else "other",
+        "tags": [tag[:80] for tag in metadata.get("tags", []) if isinstance(tag, str)][:12]
+            if isinstance(metadata.get("tags"), list) else [],
+    }
+
+
+@app.get("/api/assets/{token_id}/details")
+async def asset_details(token_id: int):
+    import re
+    if token_id <= 0:
+        raise HTTPException(400, "Invalid asset")
+    try:
+        asset = await asyncio.to_thread(get_knowledge_asset, token_id)
+    except Exception:
+        raise HTTPException(503, "Asset information is temporarily unavailable") from None
+    cid = asset["metadata_cid"]
+    conn = await get_conn()
+    try:
+        row = await conn.fetchrow("SELECT title,summary,domain,tags FROM knowledge_assets WHERE metadata_cid=$1 ORDER BY created_at DESC LIMIT 1", cid)
+    finally:
+        await conn.close()
+    if row and row["title"] and row["summary"]:
+        return asset_description(dict(row))
+    if re.fullmatch(r"[A-Za-z0-9]{20,100}", cid):
+        async with httpx.AsyncClient(timeout=8) as client:
+            for gateway in ("https://ipfs.io/ipfs/", "https://gateway.pinata.cloud/ipfs/"):
+                try:
+                    async with client.stream("GET", gateway + cid) as response:
+                        response.raise_for_status()
+                        content = bytearray()
+                        async for chunk in response.aiter_bytes():
+                            content.extend(chunk)
+                            if len(content) > 256000:
+                                raise ValueError("Metadata too large")
+                    metadata = json.loads(content)
+                    if isinstance(metadata, dict):
+                        return asset_description(metadata)
+                except (httpx.HTTPError, ValueError, TypeError):
+                    continue
+    if row:
+        return asset_description({**dict(row), "summary": row["summary"] or "Description is currently unavailable."})
+    raise HTTPException(503, "The creator's description is temporarily unavailable. Please retry.")
 
 
 class LinkTokenRequest(BaseModel):

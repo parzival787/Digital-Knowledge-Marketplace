@@ -122,3 +122,16 @@ small screens. Existing unowned rows require a reviewed migration, never auto-cl
 These changes supersede the earlier notes about missing search/dashboard/upload
 binding and historical auction visibility. Live fiat, bridge and encrypted storage
 blockers remain. Auth tests plus payments: 14 pass; frontend build passes.
+
+## Google and payment verification continuation
+
+Google authorization-code login/signup with browser-bound state and PKCE is added;
+credentials are absent, so the option is visibly disabled until configured. Login
+and signup use a standalone layout without marketplace navigation. Asset details
+allowlist readable catalog fields and fetch descriptions through the backend;
+new uploads save summaries. Legacy descriptions may be unavailable.
+Fiat checkout creation is serialized per account/asset to prevent duplicate orders.
+19 auth/payment tests, 121 contract tests, frontend build and the document/search
+pipeline passed. Read-only RPC still confirms funded settlement is not deployed.
+Razorpay is a test INR gateway; no INR-to-USDC converter is integrated. Settlement
+requires pre-funded test USDC. See PAYMENT_AUTH_VERIFICATION.md for setup and limits.

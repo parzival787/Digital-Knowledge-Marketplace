@@ -35,12 +35,23 @@ class PaymentService:
             buyer_address=request.buyer_address, amount_usdc=amount,
             payment_method=request.payment_method, status=PaymentStatus.CREATED,
         )
-        if isinstance(provider, RazorpayProvider):
-            from .settlement import validate_checkout
-            context = await asyncio.to_thread(validate_checkout, order)
-            order = order.model_copy(update={**context, **provider.quote(amount)})
         conn = await get_conn()
         try:
+            if user_id is not None and request.payment_method in (PaymentMethod.UPI, PaymentMethod.CARD):
+                # Serialize checkout creation across tabs/processes for this account/asset.
+                await conn.execute("SELECT pg_advisory_lock(hashtextextended($1,0))", f"checkout:{user_id}:{request.token_id}")
+                existing = await conn.fetchrow("""
+                    SELECT * FROM payment_orders WHERE user_id=$1 AND token_id=$2
+                    AND payment_method IN ('upi','card')
+                    AND (status<>'FAILED' OR provider_payment_id IS NOT NULL)
+                    ORDER BY created_at DESC LIMIT 1
+                """, user_id, request.token_id)
+                if existing:
+                    return PaymentOrder.model_validate(dict(existing))
+            if isinstance(provider, RazorpayProvider):
+                from .settlement import validate_checkout
+                context = await asyncio.to_thread(validate_checkout, order)
+                order = order.model_copy(update={**context, **provider.quote(amount)})
             # Save the identity before contacting a provider so failures leave
             # an audit record instead of silently losing the order.
             await conn.execute("""

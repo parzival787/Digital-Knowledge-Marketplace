@@ -110,6 +110,7 @@ async def setup_tables():
         """)
         await conn.execute("ALTER TABLE payment_orders ADD COLUMN IF NOT EXISTS user_id BIGINT")
         await conn.execute("ALTER TABLE knowledge_assets ADD COLUMN IF NOT EXISTS user_id BIGINT")
+        await conn.execute("ALTER TABLE knowledge_assets ADD COLUMN IF NOT EXISTS summary TEXT DEFAULT ''")
 
         await conn.execute("""
             CREATE INDEX IF NOT EXISTS assets_quality_idx
@@ -140,6 +141,7 @@ async def insert_embedding(
     file_cid: str = "",
     metadata_cid: str = "",
     user_id: int | None = None,
+    summary: str = "",
 ):
     conn = await get_conn()
 
@@ -158,10 +160,10 @@ async def insert_embedding(
                 quality,
                 price_usdc,
                 blake3_hash,
-                embedding, user_id
+                embedding, user_id, summary
             )
             VALUES (
-                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11
+                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12
             )
             RETURNING id, vector_id;
             """,
@@ -176,6 +178,7 @@ async def insert_embedding(
             blake3_hash,
             np.array(embedding),
             user_id,
+            summary,
         )
 
         return dict(row)

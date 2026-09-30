@@ -111,6 +111,7 @@ export default function Web2Checkout({ tokenId, buyer, canStart }: { tokenId: bi
   return <section className="mt-4 space-y-3 rounded border p-3" aria-label="UPI and card checkout">
     {capability?.fiat_configured && <Script src="https://checkout.razorpay.com/v1/checkout.js" onReady={() => setReady(true)} onError={() => setError("Unable to load checkout. Check your connection.")} />}
     <h3 className="font-semibold">UPI / Card — Test mode</h3>
+    <p className="text-sm text-slate-600">Razorpay test checkout. No real INR is charged; settlement uses test USDC.</p>
     <p>{capability?.fiat_message || "Checking payment availability…"}</p>
     <label className="block">Payment method <select className="rounded border p-2" value={method} onChange={e => setMethod(e.target.value)} disabled={!!order}>
       <option value="upi">UPI</option><option value="card">Card</option>

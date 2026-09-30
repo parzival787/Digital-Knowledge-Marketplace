@@ -4,7 +4,8 @@
 
 | Feature / API | Frontend | Access and state |
 | --- | --- | --- |
-| Signup, login, session, logout | `/signup`, `/login`, `/account` | Username/password; server-side sessions expire after 12 hours and logout revokes them |
+| Signup, login, session, logout | `/signup`, `/login`, `/account` | Username/password or configured Google OAuth; server-side sessions expire after 12 hours and logout revokes them |
+| Public asset description, `/api/assets/{token_id}/details` | Marketplace → View Details | Allowlisted title, summary, topic and tags; no raw metadata, file IDs or hashes |
 | Wallet challenge and signature verification | `/account` | Logged-in account; single-use five-minute challenge; one verified wallet per account |
 | Document analysis, `/api/analyze` | `/mint`, step 1 | Login; file size limit; AI quality feedback |
 | Upload, `/api/upload-ipfs` | `/mint`, step 2 | Verified wallet; multipart metadata; upload is saved under the account |
@@ -42,8 +43,10 @@ users. Reviews are only a database table: there is no existing review API to wir
   legacy private records. Existing public marketplace listings remain browsable.
 - IPFS uploads are public. Login protects account data and operations, not the
   confidentiality of already published files. Encrypted storage is separate work.
-- No email verification, password recovery, MFA, wallet reassignment or independent
-  security audit is implemented. Signup uses usernames, not unverified email identity.
+- No password recovery, MFA, wallet reassignment or independent security audit is
+  implemented. Password signup uses usernames; Google requires a verified email
+  and identifies accounts by stable subject, without automatically merging accounts.
+- Google setup and detailed payment verification are in PAYMENT_AUTH_VERIFICATION.md.
 - Razorpay test settlement still needs deployment of `buyAssetFor`, provider keys,
   a funded/approved dedicated signer and live E2E verification. Bridge checkout is
   unavailable on Amoy. The UI explicitly shows these limitations.

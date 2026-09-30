@@ -96,6 +96,50 @@ class PaymentTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await conn.close()
 
+    async def test_concurrent_checkout_creation_reuses_one_provider_order(self):
+        workers = [service.PaymentService(), service.PaymentService()]
+        from services.payments.mock_provider import MockPaymentProvider
+        provider = MockPaymentProvider()
+        create = AsyncMock(wraps=provider.create_payment)
+        provider.create_payment = create
+        for worker in workers:
+            worker.providers[PaymentMethod.CARD] = provider
+        request = self.request.model_copy(update={"payment_method": PaymentMethod.CARD})
+        orders = await asyncio.gather(*(worker.create_order(request, user_id=123) for worker in workers))
+        self.assertEqual(orders[0].order_id, orders[1].order_id)
+        self.assertEqual(create.await_count, 1)
+
+    def test_settlement_verifies_hash_receipt_depth_sender_and_call(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from web3 import Web3
+        from services.payments.models import PaymentOrder
+        raw = "0xabcd"
+        account = SimpleNamespace(address="payer")
+        market = Mock(address="market")
+        market.encode_abi.return_value = "0x1234"
+        receipt = SimpleNamespace(status=1, blockNumber=100)
+        w3 = Mock()
+        w3.eth.get_transaction_receipt.return_value = receipt
+        w3.eth.block_number = 100
+        w3.eth.get_transaction.return_value = {"to": "market", "from": "payer", "input": bytes.fromhex("1234")}
+        order = PaymentOrder(order_id="example", token_id=1, buyer_address=self.request.buyer_address,
+            amount_usdc=5, payment_method=PaymentMethod.CARD, status=PaymentStatus.SETTLEMENT_PENDING,
+            chain_id=80002, marketplace_address="market", listing_id=1,
+            settlement_tx_hash=Web3.to_hex(Web3.keccak(hexstr=raw)))
+        with patch.object(settlement, "connection", return_value=(w3, account, market)):
+            self.assertEqual(settlement.broadcast_and_verify(order, raw), "pending")
+            w3.eth.block_number = 101
+            self.assertEqual(settlement.broadcast_and_verify(order, raw), "settled")
+            receipt.status = 0
+            self.assertEqual(settlement.broadcast_and_verify(order, raw), "reverted")
+            receipt.status = 1
+            w3.eth.get_transaction.return_value["from"] = "attacker"
+            with self.assertRaises(ValueError):
+                settlement.broadcast_and_verify(order, raw)
+            with self.assertRaises(ValueError):
+                settlement.broadcast_and_verify(order, "0x12")
+
     async def test_invalid_and_failed_orders(self):
         worker = service.PaymentService()
         self.assertIsNone(await worker.get_order("missing"))

@@ -1,16 +1,19 @@
 """Password accounts, revocable cookie sessions, and proof of wallet ownership."""
 import asyncio
+import base64
 import hashlib
 import hmac
 import os
 import re
 import secrets
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlencode
 
 import asyncpg
+import httpx
 from eth_account import Account
 from eth_account.messages import encode_defunct
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, field_validator
 from web3 import Web3
 from .pgvector_client import get_conn
@@ -18,6 +21,7 @@ from .pgvector_client import get_conn
 ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000").rstrip("/")
 SECURE = urlparse(ORIGIN).scheme == "https"
 COOKIE = "__Host-dkm_session" if SECURE else "dkm_session"
+OAUTH_COOKIE = "__Host-dkm_oauth" if SECURE else "dkm_oauth"
 router = APIRouter(prefix="/api/auth", tags=["Account"])
 _hash_slots = asyncio.Semaphore(2)
 
@@ -41,6 +45,12 @@ async def setup_auth():
             );
             ALTER TABLE knowledge_assets ADD COLUMN IF NOT EXISTS user_id BIGINT REFERENCES app_users(id);
             ALTER TABLE payment_orders ADD COLUMN IF NOT EXISTS user_id BIGINT REFERENCES app_users(id);
+            ALTER TABLE app_users ALTER COLUMN password_hash DROP NOT NULL;
+            ALTER TABLE app_users ADD COLUMN IF NOT EXISTS google_sub TEXT UNIQUE;
+            CREATE TABLE IF NOT EXISTS google_auth_flows (
+                state_hash TEXT PRIMARY KEY, browser_hash TEXT NOT NULL,
+                verifier TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL
+            );
         """)
     finally:
         await conn.close()
@@ -152,12 +162,97 @@ async def login(body: Credentials, request: Request, response: Response):
     conn = await get_conn()
     try:
         row = await conn.fetchrow("SELECT * FROM app_users WHERE username=$1", body.username)
-        stored = row["password_hash"] if row else "00"*16 + ":" + "00"*64
+        stored = row["password_hash"] if row and row["password_hash"] else "00"*16 + ":" + "00"*64
         candidate = await hash_password(body.password, stored.split(":")[0])
         if not hmac.compare_digest(candidate, stored):
             raise HTTPException(401, "Invalid username or password")
         await new_session(conn, request, response, row["id"])
         return {key: row[key] for key in ("id", "username", "wallet_address")}
+    finally:
+        await conn.close()
+
+
+def google_config():
+    values = [os.getenv(key, "") for key in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI")]
+    if not all(values):
+        raise HTTPException(503, "Google sign-in is not configured yet. Use password login for now.")
+    return values
+
+
+@router.get("/methods")
+async def methods():
+    return {"google": all(os.getenv(key) for key in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI")), "password": True}
+
+
+@router.post("/google/start")
+async def google_start(request: Request, response: Response):
+    same_origin(request)
+    client_id, _, redirect_uri = google_config()
+    await throttle(request, "google:" + (request.client.host if request.client else "unknown"))
+    state, browser, verifier = [secrets.token_urlsafe(32) for _ in range(3)]
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+    conn = await get_conn()
+    try:
+        await conn.execute("DELETE FROM google_auth_flows WHERE expires_at<NOW() OR browser_hash=$1", digest(request.cookies.get(OAUTH_COOKIE, "")))
+        await conn.execute("INSERT INTO google_auth_flows VALUES ($1,$2,$3,NOW()+INTERVAL '5 minutes')", digest(state), digest(browser), verifier)
+    finally:
+        await conn.close()
+    # Lax is needed only for Google's top-level callback; app sessions stay Strict.
+    response.set_cookie(OAUTH_COOKIE, browser, max_age=300, httponly=True, secure=SECURE, samesite="lax", path="/")
+    return {"url": "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode({
+        "client_id": client_id, "redirect_uri": redirect_uri, "response_type": "code",
+        "scope": "openid email profile", "state": state, "prompt": "select_account",
+        "code_challenge": challenge, "code_challenge_method": "S256",
+    })}
+
+
+@router.get("/google/callback")
+async def google_callback(request: Request, state: str = "", code: str = "", error: str = "", iss: str = ""):
+    failure = RedirectResponse(ORIGIN + "/login?google_error=1", status_code=303)
+    failure.delete_cookie(OAUTH_COOKIE, path="/", secure=SECURE, httponly=True, samesite="lax")
+    client_id, secret, redirect_uri = google_config()
+    if len(state) > 200 or len(code) > 4096 or not state:
+        return failure
+    conn = await get_conn()
+    try:
+        flow = await conn.fetchrow("""
+            DELETE FROM google_auth_flows
+            WHERE state_hash=$1 AND browser_hash=$2 AND expires_at>NOW()
+            RETURNING verifier
+        """, digest(state), digest(request.cookies.get(OAUTH_COOKIE, "")))
+        if not flow or error or not code or iss not in ("", "https://accounts.google.com"):
+            return failure
+        try:
+            # Identity is fetched server-to-server using only the token returned
+            # by our code exchange. Never accept browser-provided profile/token data.
+            async with httpx.AsyncClient(timeout=20) as client:
+                token_response = await client.post("https://oauth2.googleapis.com/token", data={
+                    "client_id": client_id, "client_secret": secret, "code": code,
+                    "redirect_uri": redirect_uri, "grant_type": "authorization_code",
+                    "code_verifier": flow["verifier"],
+                })
+                token_response.raise_for_status()
+                token = token_response.json()["access_token"]
+                profile_response = await client.get("https://openidconnect.googleapis.com/v1/userinfo", headers={"Authorization": f"Bearer {token}"})
+                profile_response.raise_for_status()
+                profile = profile_response.json()
+            subject = profile.get("sub")
+            if not isinstance(subject, str) or not 1 <= len(subject) <= 255 or not subject.isascii() or profile.get("email_verified") is not True:
+                return failure
+        except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
+            return failure
+        # Google subject is the identity. Never merge accounts by email/name.
+        name = re.sub(r"[^a-z0-9_]", "", str(profile.get("given_name", "google")).lower())[:20] or "google"
+        row = await conn.fetchrow("""
+            INSERT INTO app_users(username,google_sub) VALUES ($1,$2)
+            ON CONFLICT (google_sub) DO UPDATE SET google_sub=EXCLUDED.google_sub
+            RETURNING id
+        """, name + "_" + secrets.token_hex(6), subject)
+        response = RedirectResponse(ORIGIN + "/account", status_code=303)
+        await new_session(conn, request, response, row["id"])
+        response.delete_cookie(OAUTH_COOKIE, path="/", secure=SECURE, httponly=True, samesite="lax")
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
     finally:
         await conn.close()
 

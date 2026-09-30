@@ -230,27 +230,17 @@ export default function AssetCard({
     setMetadataError("");
 
     try {
-      const gatewayUrl =
-        `https://ipfs.io/ipfs/${asset.metadataCID}`;
+      const data = await api<Record<string, unknown>>(`/api/assets/${tokenId}/details`);
 
-      const response = await fetch(gatewayUrl);
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch metadata. HTTP ${response.status}`
-        );
-      }
-
-      const data = await response.json();
-
+      if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Asset information is unavailable.");
       setMetadata(data);
     } catch (error) {
       console.error("Metadata fetch error:", error);
 
       setMetadataError(
         error instanceof Error
-          ? error.message
-          : "Unable to load metadata from IPFS."
+          ? "Could not load the description. Please try again shortly."
+          : "Could not load the description."
       );
     } finally {
       setLoadingMetadata(false);
@@ -540,26 +530,6 @@ export default function AssetCard({
 
         <div>
           <span className="font-medium">
-            IPFS CID:
-          </span>{" "}
-
-          <span className="break-all">
-            {asset.ipfsCID}
-          </span>
-        </div>
-
-        <div>
-          <span className="font-medium">
-            Metadata CID:
-          </span>{" "}
-
-          <span className="break-all">
-            {asset.metadataCID}
-          </span>
-        </div>
-
-        <div>
-          <span className="font-medium">
             Price:
           </span>{" "}
 
@@ -572,7 +542,7 @@ export default function AssetCard({
           </span>{" "}
 
           <span className="break-all">
-            {asset.seller}
+            {asset.seller.slice(0, 6)}…{asset.seller.slice(-4)}
           </span>
         </div>
 
@@ -925,12 +895,12 @@ export default function AssetCard({
         <div className="mt-6 rounded-lg border bg-gray-50 p-4">
 
           <h3 className="font-semibold">
-            Metadata
+            About this asset
           </h3>
 
           {loadingMetadata && (
             <p className="mt-3 text-sm">
-              Loading metadata from IPFS...
+              Loading asset information...
             </p>
           )}
 
@@ -941,13 +911,14 @@ export default function AssetCard({
           )}
 
           {metadata && (
-            <pre className="mt-3 overflow-auto rounded-md bg-white p-3 text-xs">
-              {JSON.stringify(
-                metadata,
-                null,
-                2
-              )}
-            </pre>
+            <div className="mt-4 space-y-4 text-sm">
+              <h4 className="text-lg font-semibold">{typeof metadata.title === "string" && metadata.title.trim() ? metadata.title : "Knowledge asset"}</h4>
+              <p className="whitespace-pre-line">{typeof metadata.summary === "string" && metadata.summary.trim() ? metadata.summary : typeof metadata.description === "string" ? metadata.description : "The creator has not provided a description yet."}</p>
+              {typeof metadata.domain === "string" && <p><span className="font-medium">Topic:</span> {metadata.domain}</p>}
+              {Array.isArray(metadata.tags) && <div className="flex flex-wrap gap-2">{metadata.tags.filter((tag): tag is string => typeof tag === "string").slice(0, 12).map((tag, index) => <span key={index} className="rounded-full bg-white px-3 py-1">{tag}</span>)}</div>}
+              <p><span className="font-medium">License:</span> {licenseName(asset.license)}</p>
+              <p><span className="font-medium">Quality:</span> {asset.qualityScore.toString()}/100</p>
+            </div>
           )}
 
         </div>
