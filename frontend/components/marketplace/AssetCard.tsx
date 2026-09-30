@@ -824,7 +824,8 @@ export default function AssetCard({
           </button>
 
           <p className="text-sm">You need Amoy test POL for gas, including USDC approval and purchase. No asset is reserved while you fund your wallet or approve tokens.</p>
-          <Link href="/funding" className="block underline">Need USDC? Add USDC (INR funding unavailable)</Link>
+          <Link href="/funding#crypto" className="block underline">Use another cryptocurrency</Link>
+          <Link href="/funding#fiat" className="block underline">Need USDC? Buy with INR (unavailable)</Link>
           {buyError && (
             <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-600">
               {buyError}

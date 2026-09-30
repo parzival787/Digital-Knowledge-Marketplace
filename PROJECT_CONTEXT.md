@@ -200,3 +200,12 @@ to entry pages redirect to /dashboard, and logout returns to /. Password and Goo
 login/signup both lead to /dashboard. Full navigation becomes visible after login.
 Backend account/wallet authorization remains the security boundary; this change
 controls page visibility, not public blockchain or public catalog data access.
+
+## Other-crypto request
+
+Added a signed-in Use another cryptocurrency entry from fixed-price/auction pages
+and a separate crypto section on /funding. It explains supported swaps/bridges and
+source/destination gas without advertising universal token support. LI.FI is the
+chosen integration target, not installed/enabled; current Amoy/MockUSDC has no route.
+PRODUCTION_PAYMENTS.md documents actual execution prerequisites and wallet funding
+versus purchase semantics. No executable quote/SDK or live conversion was added.

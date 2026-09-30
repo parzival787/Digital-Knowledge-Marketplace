@@ -146,3 +146,55 @@ mainnet chain/token and contract review; finality/reorg tests; secret manager an
 signer policy deployment; independent audit; actual restore/load drills; restricted
 operator roles; production observability and customer support process. Existing
 Amoy test guards must not be removed as a shortcut to launch.
+
+## Existing cryptocurrency funding (Web3)
+
+The owner requested payment from existing crypto holdings, including ETH, rather
+than having to separately obtain the marketplace currency. Select LI.FI as the
+swap/bridge integration target. This is separate from the INR provider choice.
+It is NOT installed or enabled in the current demo. Official LI.FI documentation
+states that testnets are no longer supported, so Amoy/MockUSDC cannot be given a
+working route by adding more wallet networks or a token dropdown.
+
+Production flow: source crypto -> supported swap/bridge -> native USDC in the
+account's verified wallet -> current listing validation -> buyer approval/purchase
+-> canonical receipt and entitlement. For example, ETH on Ethereum could fund USDC
+on Polygon when a valid route and supported deployment exist. The marketplace
+continues settling in one token. Conversion success is wallet funding, never asset
+purchase, auction reservation, bid placement or entitlement.
+
+Initial scope should match the existing EVM wallet integration: discover supported
+source EVM chains/tokens dynamically and display only routes the provider can quote.
+Never promise every cryptocurrency; illiquid tokens, unsupported chains and small
+amounts can have no viable route. Native Bitcoin/Solana purchases would also need
+appropriate wallet connectors, source signing/status handling and separate tests.
+Do not silently treat wrapped BTC as native BTC or reuse an EVM address as a
+non-EVM receiving address.
+
+The quote review must display source chain/token/amount, destination chain and exact
+native USDC contract, verified recipient, expected and minimum received amounts,
+provider/bridge fees, source gas, destination gas provision, slippage and validity.
+Use the provider's gas-refuel support where available and verify actual POL/USDC
+balances after completion. If gas cannot be delivered or sponsored, disclose that
+before accepting the route. Buying USDC alone does not guarantee gas for a later
+purchase. Source execution still needs source gas unless a supported relayed route
+explicitly covers it; no blanket gas-free claim.
+
+Before enabling execution: reviewed production deployment/legacy access migration;
+provider route and allowance validation; exact bounded token approval; wallet/network
+binding; quote expiry and re-quote on changes; durable source/destination references;
+restart/resume and partial-bridge failure handling; canonical destination balance
+verification; updated listing check and independent purchase confirmation. Never
+forward unvalidated provider calldata, accept a user-supplied destination override,
+or mark provider COMPLETED as a purchase. A route may deliver an intermediate token
+if destination execution fails; surface the actual outcome and support recovery.
+
+Current implementation only adds a clearly unavailable crypto-funding entry in the
+signed-in UI. No SDK, executable quote endpoint, chain switch, approval, transfer,
+mainnet deployment or crypto conversion was added. Integration execution remains
+blocked on the supported production deployment; this is not a completed payment route.
+
+Sources checked 2026-10-01:
+[LI.FI quote API](https://docs.li.fi/api-reference/get-a-quote-for-a-token-transfer),
+[testnet limitation](https://help.li.fi/hc/en-us/articles/11825798974107-How-can-I-test-my-integration-with-your-protocol-API-Widget-SDK-via-Testnets),
+[gas funding responsibilities](https://help.li.fi/hc/en-us/articles/13304979742363-Who-pays-for-gas-cost-on-the-source-and-destination-chains).

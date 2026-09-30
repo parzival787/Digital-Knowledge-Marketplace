@@ -97,7 +97,7 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price }: {
   return <section className="mt-5 space-y-3 rounded-lg border p-4" aria-label="Auction">
     <h3 className="font-semibold">Auction{resolvedId > 0n ? ` #${resolvedId}` : ""}</h3>
     <p className="text-sm">Every auction transaction needs Amoy test POL for gas. Funding a wallet does not place or reserve a bid.</p>
-    <Link className="block underline" href="/funding">Add USDC (INR funding unavailable)</Link>
+    <Link className="block underline" href="/funding#crypto">Fund a bid using another cryptocurrency</Link>
     {isError && <p role="alert">Unable to load auction state.</p>}
     {!!resolvedId && !auction && !isError && <p>Loading auction…</p>}
     {auction && <>
