@@ -248,7 +248,7 @@ async def google_callback(request: Request, state: str = "", code: str = "", err
             ON CONFLICT (google_sub) DO UPDATE SET google_sub=EXCLUDED.google_sub
             RETURNING id
         """, name + "_" + secrets.token_hex(6), subject)
-        response = RedirectResponse(ORIGIN + "/account", status_code=303)
+        response = RedirectResponse(ORIGIN + "/dashboard", status_code=303)
         await new_session(conn, request, response, row["id"])
         response.delete_cookie(OAUTH_COOKIE, path="/", secure=SECURE, httponly=True, samesite="lax")
         response.headers["Referrer-Policy"] = "no-referrer"

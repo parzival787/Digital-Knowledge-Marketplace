@@ -73,3 +73,32 @@ transactions or live fiat payments are authorized by these tests.
 
 References: [OWASP password storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
 and [OWASP session management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html).
+
+## Entry flow acceptance (2026-10-01)
+
+The application now uses a shared AppShell. Only /, /signup and /login render for
+anonymous visitors. All other pages redirect to /login without mounting app content
+or navigation. Signed-in visits to the three entry routes redirect to /dashboard.
+Password and Google authentication land on /dashboard; logout returns to welcome.
+No wallet or feature controls appear before authentication. This UI restriction
+supplements existing backend authorization; public on-chain/catalog data is not
+made private by hiding navigation.
+
+Repeatable browser acceptance check:
+
+1. Logged out, open /: only welcome, Create an account and Log in actions appear.
+2. Follow Create an account: signup form and Back to welcome appear, with no navbar.
+3. Create a disposable account: /dashboard opens with marketplace, auctions, funding,
+   search, create-asset, dashboard, status and account navigation plus wallet controls.
+4. Open /signup while signed in: redirect to /dashboard.
+5. In Account, log out: / shows welcome and removes the application controls.
+6. Open /marketplace directly: redirect to standalone /login without app content.
+7. Log in with the disposable account: /dashboard and full navigation return.
+8. Log out and remove only the disposable account after checking it owns no assets,
+   payments or wallet. Never delete a real account as part of this check.
+
+All steps passed in the in-app browser against localhost:3000. The disposable account
+and sessions were removed. Frontend production build/lint/typecheck and 12 backend
+authentication tests passed, including the updated Google dashboard redirect.
+Existing optional pino-pretty and webpack cache warnings were non-fatal. No live
+Google consent or wallet signature was exercised.

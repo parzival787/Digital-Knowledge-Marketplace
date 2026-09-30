@@ -23,7 +23,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function logout() {
     await api("/api/auth/logout", { method: "POST" });
     setUser(null);
-    window.location.assign("/login");
+    window.location.assign("/");
   }
   return <AuthContext.Provider value={{ user, loading, refresh, logout }}>{children}</AuthContext.Provider>;
 }

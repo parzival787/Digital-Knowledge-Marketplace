@@ -189,3 +189,14 @@ engineering migration prerequisites and the live acceptance matrix. New deployme
 still requires legacy market access/history compatibility before default address
 switch. Preflight confirmed current RPC/registry but no funded-settlement interface;
 Razorpay/signing prerequisites remain absent. No live payments or deployment performed.
+
+## Welcome and authenticated application layout
+
+The root route is now a standalone welcome page with only Create an account and
+Log in actions. Login/signup include a return-to-welcome link and no application
+navigation or wallet controls. AppShell checks the session before mounting any
+application page: anonymous direct links redirect to /login, authenticated visits
+to entry pages redirect to /dashboard, and logout returns to /. Password and Google
+login/signup both lead to /dashboard. Full navigation becomes visible after login.
+Backend account/wallet authorization remains the security boundary; this change
+controls page visibility, not public blockchain or public catalog data access.

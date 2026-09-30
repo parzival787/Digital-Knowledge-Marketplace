@@ -34,12 +34,12 @@ export default function AuthForm({ signup = false }: { signup?: boolean }) {
     setBusy(true);
     try {
       await api(`/api/auth/${signup ? "signup" : "login"}`, { method: "POST", body: JSON.stringify({ username, password }) });
-      await refresh(); router.replace("/account");
+      await refresh(); router.replace("/dashboard");
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to sign in."); }
     finally { setBusy(false); }
   }
   return <main className="mx-auto grid max-w-5xl gap-10 px-6 py-16 md:grid-cols-2">
-    <section className="rounded-2xl bg-slate-950 p-8 text-white"><p className="text-sm uppercase tracking-widest text-blue-300">DKM / Your workspace</p><h1 className="mt-6 text-4xl font-bold">{signup ? "Start sharing knowledge." : "Welcome back."}</h1><p className="mt-6 text-slate-300">Keep your uploads and payment history in your own account. Link your wallet by signing a verification message.</p><p className="mt-6 text-sm text-slate-400">Sign in with Google or a password. Your wallet separately authorizes blockchain transactions.</p></section>
+    <section className="rounded-2xl bg-slate-950 p-8 text-white"><Link href="/" className="mb-6 block text-sm text-blue-300 underline">Back to welcome</Link><p className="text-sm uppercase tracking-widest text-blue-300">DKM / Your workspace</p><h1 className="mt-6 text-4xl font-bold">{signup ? "Start sharing knowledge." : "Welcome back."}</h1><p className="mt-6 text-slate-300">Create an account or log in to open your personal workspace.</p><p className="mt-6 text-sm text-slate-400">All marketplace and creator tools are available after you sign in.</p></section>
     <form onSubmit={submit} className="space-y-5 rounded-2xl border p-8">
       <h2 className="text-2xl font-semibold">{signup ? "Create an account" : "Log in"}</h2>
       <button type="button" onClick={googleLogin} disabled={busy || !googleAvailable} className="w-full rounded-lg border border-slate-300 bg-white p-3 font-medium text-slate-800 disabled:opacity-50">Continue with Google</button>

@@ -211,7 +211,7 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
                 with patch.object(auth.httpx, "AsyncClient", side_effect=lambda **kw: original_client(transport=httpx.MockTransport(provider), **kw)):
                     response = await self.client.get(callback)
                 self.assertEqual(response.status_code, 303)
-                self.assertEqual(response.headers["location"], auth.ORIGIN + "/account")
+                self.assertEqual(response.headers["location"], auth.ORIGIN + "/dashboard")
                 me = (await self.client.get("/api/auth/me")).json()
                 self.assertNotEqual(me["id"], password_user["id"])
                 self.assertTrue(me["username"].startswith("alice_"))
