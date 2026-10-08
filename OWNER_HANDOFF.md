@@ -1,5 +1,9 @@
 # DKM handoff: completed work and owner actions
 
+> 2026-10-09: Onmeta is no longer the first onboarding dependency. Follow MASTER_TODO.md for Transak sandbox, Onramp.money qualification and LI.FI/Relay alternatives; older provider choices below are historical.
+
+> Start with [MASTER_TODO.md](MASTER_TODO.md), the consolidated owner and engineering checklist. This document retains detailed background.
+
 Updated 2026-09-30. This is an operational handoff, not a production certification.
 
 ## Completed in this continuation
@@ -23,7 +27,14 @@ Updated 2026-09-30. This is an operational handoff, not a production certificati
   secrets, and a least-privilege operator role SQL template. Recovery attribution
   now uses SESSION_USER, retaining the personal login through SET ROLE.
 
-## What you need to do first
+## Latest payment owner actions (2026-10-01)
+
+Start with PAYMENT_TODO.md for the current Onmeta/Onramp, embedded-wallet and fee
+requirements, exact account steps and copy-ready provider enquiry. The Razorpay
+steps below are optional Amoy demonstration setup only, not a production conversion
+solution. No provider credentials or approval have been obtained by this change.
+
+## Existing Amoy demonstration setup
 
 1. **Razorpay test setup:** create test API credentials in your own account. Put
    `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` and an explicit

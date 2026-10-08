@@ -209,3 +209,28 @@ source/destination gas without advertising universal token support. LI.FI is the
 chosen integration target, not installed/enabled; current Amoy/MockUSDC has no route.
 PRODUCTION_PAYMENTS.md documents actual execution prerequisites and wallet funding
 versus purchase semantics. No executable quote/SDK or live conversion was added.
+
+
+## Payment fees and owner checklist (2026-10-01)
+
+PAYMENT_TODO.md tracks the latest crypto/UPI/embedded-wallet requirements and exact
+owner actions. Onmeta is the first INR candidate, Onramp.money the alternative;
+merchant approval, exact native USDC route and rates remain unverified. LI.FI is
+still the crypto target. Buyer pays external charges; existing DKM platform fee
+comes from seller proceeds. Funding/test checkout now explain this distinction.
+New Razorpay test orders are displayed for review before opening checkout; the
+stored amount is reused without an additional buyer DKM fee. Production fee
+quotes, provider execution, embedded wallets and migration remain unimplemented.
+
+
+## Alternative providers and checkout review (2026-10-09)
+
+Onmeta API access is difficult for the owner. MASTER_TODO.md now prioritizes
+Transak self-service staging for provider testing (not verified India/UPI), and
+Onramp.money for actual INR/UPI qualification. LI.FI remains the crypto target;
+Relay is a documented alternative. Live Relay testnet discovery returned only
+84532 and 11155111, not Amoy. No provider SDK, keys, real payment or deployment added.
+Checkout now re-fetches a pending server order before opening Razorpay, refuses
+holds/refunds/prior captures and requires another review when payment details change.
+Regression cases cover these boundaries. This improves UI safety, not reservation
+or atomicity between bank and blockchain. Earlier unrelated user files remain untouched.

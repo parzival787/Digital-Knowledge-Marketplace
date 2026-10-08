@@ -10,6 +10,12 @@ export default function FundingPage() {
   return <main className="mx-auto max-w-2xl space-y-6 px-6 py-12">
     <h1 className="text-3xl font-bold">Add USDC</h1>
     <p>Choose how to fund your wallet. Marketplace purchases are priced in USDC; POL pays the network fee.</p>
+    <section className="space-y-2 rounded-xl border p-5" aria-labelledby="fees-title">
+      <h2 id="fees-title" className="text-xl font-semibold">What you will pay</h2>
+      <p>The asset price plus external payment, conversion and network charges, including applicable taxes on those charges. A live quote must show the total before you confirm.</p>
+      <p>DKM’s platform fee comes out of the seller’s asset proceeds. It is not an extra charge to you.</p>
+      <p className="text-sm text-slate-600">Provider charges are currently unavailable. Costs already included in a provider’s rate or total must not be added twice. Network fees paid separately by your wallet will be shown separately.</p>
+    </section>
     <section id="crypto" className="space-y-3 rounded-xl border p-5" aria-labelledby="crypto-title">
       <h2 id="crypto-title" className="text-xl font-semibold">Use another cryptocurrency</h2>
       <p>Have ETH or another supported token? The planned swap and bridge option will convert it into USDC in your verified wallet before you buy.</p>

@@ -73,12 +73,19 @@ export default function Web2Checkout({ tokenId, buyer, canStart }: { tokenId: bi
     setBusy(true); setError("");
     try {
       if (!ready || !window.Razorpay) throw new Error("Checkout is still loading. Try again shortly.");
-      const value = order?.status === "PENDING" ? order : await request("create", {
+      const value = order?.status === "PENDING" ? await request(order.order_id) : await request("create", {
         token_id: Number(tokenId), buyer_address: buyer, payment_method: method,
       });
       setOrder(value);
-      if (value.status !== "PENDING" || !value.checkout_key || !value.provider_order_id || !value.fiat_amount || !value.fiat_currency) {
+      // A new or resumed server order must be shown before opening the payment UI.
+      if (order?.order_id !== value.order_id) { setBusy(false); return; }
+      if (value.recovery_status || value.provider_payment_id || value.status !== "PENDING" || !value.checkout_key || !value.provider_order_id || !value.fiat_amount || !value.fiat_currency) {
         throw new Error(value.error || "Checkout is unavailable for this order.");
+      }
+      if (order && (order.fiat_amount !== value.fiat_amount || order.fiat_currency !== value.fiat_currency
+          || order.amount_usdc !== value.amount_usdc || order.exchange_rate !== value.exchange_rate
+          || order.provider_order_id !== value.provider_order_id || order.checkout_key !== value.checkout_key)) {
+        throw new Error("Payment details changed. Review the updated total before continuing.");
       }
       new window.Razorpay({ key: value.checkout_key, order_id: value.provider_order_id,
         amount: value.fiat_amount, currency: value.fiat_currency, name: "DKM — Test payment",
@@ -116,8 +123,16 @@ export default function Web2Checkout({ tokenId, buyer, canStart }: { tokenId: bi
     <label className="block">Payment method <select className="rounded border p-2" value={method} onChange={e => setMethod(e.target.value)} disabled={!!order}>
       <option value="upi">UPI</option><option value="card">Card</option>
     </select></label>
-    {order?.fiat_amount && <p>Quote: {(order.fiat_amount / 100).toFixed(2)} {order.fiat_currency} for {order.amount_usdc} USDC. Test rate: ₹{order.exchange_rate} per USDC.</p>}
-    {canStart && !order?.recovery_status && (!order || order.status === "PENDING" || order.status === "FAILED" && !order.provider_payment_id) && <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy || !ready || restoring || !capability?.fiat_configured} onClick={checkout}>{order?.status === "PENDING" ? "Resume checkout" : "Pay with UPI / Card"}</button>}
+    <p className="text-sm">DKM’s platform fee is deducted from the seller’s asset proceeds. It is not added to your bill.</p>
+    {!!order?.fiat_amount && <div className="space-y-2 rounded bg-slate-50 p-3" aria-label="Test payment breakdown">
+      <p>Asset price: {order.amount_usdc} USDC</p>
+      <p>Test exchange rate: ₹{order.exchange_rate} per USDC</p>
+      <p>Additional DKM fee charged to you: ₹0</p>
+      <p>External conversion, payment and network charges are not quoted in this test checkout. Production charges remain unavailable.</p>
+      <p className="font-semibold">Total test payment: {(order.fiat_amount / 100).toFixed(2)} {order.fiat_currency}</p>
+      <p className="text-sm">This is a fixed test amount, not a live conversion quote. No real INR is charged.</p>
+    </div>}
+    {canStart && !order?.recovery_status && (!order || order.status === "PENDING" || order.status === "FAILED" && !order.provider_payment_id) && <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy || !ready || restoring || !capability?.fiat_configured} onClick={checkout}>{order?.status === "PENDING" ? "Continue to test payment" : "Review test payment"}</button>}
     {order && <>
       <p role="status">{order.recovery_status === "REFUNDED" ? "Full refund verified" : order.recovery_status === "REVIEW_REQUIRED" ? "Payment under review — do not pay again" : labels[order.status] || order.status}</p>
       <p className="break-all text-xs">Order: {order.order_id}</p>

@@ -1,8 +1,35 @@
 # Production payments and recovery decision
 
+> 2026-10-09: Onmeta is no longer the first onboarding dependency. Follow MASTER_TODO.md for Transak sandbox, Onramp.money qualification and LI.FI/Relay alternatives; older provider choices below are historical.
+
 Prepared 2026-09-30 following the owner's instruction to choose the production model.
 
-## Decision
+## Current direction (2026-10-01)
+
+The latest owner requirements and actionable checklist are in PAYMENT_TODO.md.
+Use LI.FI for supported crypto routes; evaluate Onmeta first and Onramp.money
+second for INR/UPI, subject to merchant approval and the exact native USDC route.
+Evaluate embedded wallets so UPI buyers need not install or manage MetaMask.
+The earlier explicit wallet-funding flow below is a recoverable interim design;
+a combined purchase is the target, not an implemented feature. Wallet recovery,
+provider destination rules and transaction sponsorship must be verified first.
+
+Buyer total = asset price + external payment/conversion/network costs and applicable
+taxes on those costs. The existing DKM fee is seller-paid out of asset proceeds.
+Never add it to the buyer total or double-count provider fees included in a rate.
+Persist and review an authenticated live quote before paying; missing fees are
+unknown, not zero. The current fixed Razorpay test quote has no production fee model.
+
+Evidence: [Onmeta checkout](https://onmeta.in/checkout),
+[merchant token availability](https://docs.onmeta.in/docs/api/fetch-tokens/),
+[Onramp transaction API](https://docs.onramp.money/onramp-whitelabel-unlisted/whitelabel-onramp-endpoints/create-transaction),
+[Privy wallets](https://docs.privy.io/wallets/connectors/usage/connect-or-create).
+Onmeta advertises USDT/USD checkout and mentions USDC use cases; native Polygon
+USDC must be confirmed from the merchant's supported-token list. Razorpay's
+[terms section 2.13(5)](https://razorpay.com/terms/) restrict crypto/NFT activity;
+adding a converter does not establish approval. Keep Razorpay test-only.
+
+## Earlier decision and interim flow
 
 Target a provider-operated fiat on-ramp that delivers USDC directly to the buyer's
 verified wallet. The buyer then approves and buys through the marketplace. Keep
