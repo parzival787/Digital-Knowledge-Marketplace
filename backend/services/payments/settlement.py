@@ -62,7 +62,8 @@ def validate_checkout(order: PaymentOrder) -> dict:
         raise ValueError("Database and listing prices differ; the seller must reconcile them before fiat checkout")
     if listing[2].lower() == order.buyer_address.lower():
         raise ValueError("Sellers cannot buy their own asset")
-    if market.functions.hasPurchased(order.token_id, order.buyer_address).call():
+    from services.blockchain import has_purchased
+    if has_purchased(order.token_id, order.buyer_address):
         raise ValueError("This wallet already has purchase entitlement")
     token = w3.eth.contract(address=market.functions.usdc().call(), abi=TOKEN_ABI)
     if token.functions.balanceOf(account.address).call() < amount:
@@ -86,6 +87,19 @@ def prepare(order: PaymentOrder):
     return Web3.to_hex(signed.hash), Web3.to_hex(signed.raw_transaction)
 
 
+def confirmed_receipt(w3, tx_hash, receipt):
+    if w3.eth.block_number < receipt.blockNumber + 1:
+        return False
+    canonical = w3.eth.get_block(receipt.blockNumber)
+    fresh = w3.eth.get_transaction_receipt(tx_hash)
+    if (Web3.to_hex(receipt.transactionHash).lower() != tx_hash.lower()
+            or fresh.transactionHash != receipt.transactionHash
+            or fresh.blockHash != receipt.blockHash or fresh.blockNumber != receipt.blockNumber
+            or fresh.status != receipt.status or canonical.hash != receipt.blockHash):
+        raise ValueError("Settlement receipt changed or is no longer canonical")
+    return True
+
+
 def broadcast_and_verify(order: PaymentOrder, raw: str):
     w3, account, market = connection()
     if order.chain_id != 80002 or order.marketplace_address != market.address:
@@ -104,7 +118,7 @@ def broadcast_and_verify(order: PaymentOrder, raw: str):
             receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=15, poll_latency=1)
         except TimeExhausted:
             return "pending"
-    if w3.eth.block_number < receipt.blockNumber + 1:
+    if not confirmed_receipt(w3, tx_hash, receipt):
         return "pending"
     expected_data = market.encode_abi("buyAssetFor", args=[
         order.listing_id, order.buyer_address, order.amount_usdc * 1_000_000, Web3.keccak(text=order.order_id)

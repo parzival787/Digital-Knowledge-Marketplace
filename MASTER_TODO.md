@@ -372,3 +372,45 @@ Blocked on: error message with all secrets removed
 This does not remove the backend/provider race boundary: a final status read is
 not a reservation or lock against a later capture. Existing order deduplication and
 provider verification remain necessary. No production on-ramp is integrated.
+
+
+## Migration and settlement verification continuation (2026-10-09)
+
+Implemented shared canonical-receipt verification for backend settlement and refund
+eligibility. A changed transaction/block/status or disappeared receipt fails closed;
+a shallow receipt remains pending. Two blocks remain a test policy, not production
+finality certification.
+
+Legacy access is now configurable through backend LEGACY_MARKETPLACE_ADDRESSES and
+frontend LEGACY_MARKETPLACES. Defaults are empty: no runtime addresses changed. Only
+reviewed old markets on the same chain/KnowledgeAsset registry may be configured.
+Backend download/review access and purchase counts include legacy markets; frontend
+entitlement checks and purchase guards prevent duplicate purchases across them.
+Fiat checkout also checks prior entitlement. Fixed-price activity includes configured
+previous markets and preserves their addresses. Auctions can select old markets for
+bidding/finalization/refunds, and sellers can cancel previous listings on asset cards.
+
+Migration still needs a recorded inventory, matching frontend/backend configuration,
+reviewed deployment, seller cancellation/relisting and live acceptance. Compatibility
+code is not evidence that a deployment or migration occurred. Complete event indexing,
+auction/net lifetime reporting and provider/embedded-wallet adapters remain engineering
+work; they are not owner credential tasks.
+
+Verification: 31 backend tests passed together after Docker/PostgreSQL was restored;
+the additional history regression and three related offline checks then passed.
+Seven frontend test groups pass. Existing 121 local Hardhat tests passed again.
+Read-only Amoy preflight confirms connected RPC and matching registry, but funded
+settlement remains unavailable and Razorpay/signer settings are missing.
+
+
+### Required engineering follow-through (not delegated to the owner)
+
+- [ ] Validate recorded legacy inventory and matching backend/frontend addresses
+  before deployment; test real old and new purchaser access after the switch.
+- [ ] Implement/verify the selected provider and embedded-wallet adapters, live
+  quote breakdowns, callback verification and completion/refund paths.
+- [ ] Finish persistent event indexing and auction/net earnings reporting.
+- [ ] Complete production configuration, security drills and independent audit fixes.
+- [ ] Execute live acceptance and produce the final report/demo evidence.
+
+Providing credentials enables these steps; it does not automatically complete them.

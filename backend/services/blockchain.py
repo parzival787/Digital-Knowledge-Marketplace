@@ -62,34 +62,37 @@ marketplace = w3.eth.contract(
 )
 
 
-def has_purchased(
-    token_id: int,
-    buyer_address: str
-) -> bool:
+def entitlement_markets():
+    # Legacy markets retain purchases after a new marketplace becomes active.
+    markets = [marketplace]
+    seen = {marketplace.address.lower()}
+    for value in os.getenv("LEGACY_MARKETPLACE_ADDRESSES", "").split(","):
+        value = value.strip()
+        if not value:
+            continue
+        address = Web3.to_checksum_address(value)
+        if address.lower() in seen:
+            continue
+        if int(address, 16) == 0:
+            raise ValueError("Invalid legacy marketplace")
+        abi = MARKETPLACE_ABI + [{"type": "function", "name": "knowledgeAsset",
+            "stateMutability": "view", "inputs": [], "outputs": [{"name": "", "type": "address"}]}]
+        legacy = w3.eth.contract(address=address, abi=abi)
+        if w3.eth.chain_id != CHAIN_ID or legacy.functions.knowledgeAsset().call().lower() != KNOWLEDGE_ASSET_ADDRESS.lower():
+            raise ValueError("Legacy marketplace belongs to a different registry or chain")
+        markets.append(legacy)
+        seen.add(address.lower())
+    return markets
 
-    buyer = Web3.to_checksum_address(
-        buyer_address
-    )
 
-    return marketplace.functions.hasPurchased(
-        token_id,
-        buyer
-    ).call()
+def has_purchased(token_id: int, buyer_address: str) -> bool:
+    buyer = Web3.to_checksum_address(buyer_address)
+    return any(market.functions.hasPurchased(token_id, buyer).call() for market in entitlement_markets())
 
 
-def get_purchase_count(
-    token_id: int,
-    buyer_address: str
-) -> int:
-
-    buyer = Web3.to_checksum_address(
-        buyer_address
-    )
-
-    return marketplace.functions.purchaseCount(
-        token_id,
-        buyer
-    ).call()
+def get_purchase_count(token_id: int, buyer_address: str) -> int:
+    buyer = Web3.to_checksum_address(buyer_address)
+    return sum(market.functions.purchaseCount(token_id, buyer).call() for market in entitlement_markets())
 
 
 KNOWLEDGE_ASSET_ADDRESS = os.getenv(

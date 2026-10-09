@@ -5,7 +5,7 @@ type Client = Pick<PublicClient, "readContract" | "getBlockNumber" | "getBalance
 
 export class PurchaseCheckError extends Error {}
 
-export async function checkListing(client: Client, market: Contract, registry: Contract, token: bigint, buyer: Address, expectedId: bigint, expectedPrice: bigint) {
+export async function checkListing(client: Client, market: Contract, registry: Contract, token: bigint, buyer: Address, expectedId: bigint, expectedPrice: bigint, legacyMarkets: readonly Contract[] = []) {
   const blockNumber = await client.getBlockNumber({ cacheTime: 0 });
   const id = await client.readContract({ ...market, functionName: "tokenToListing", args: [token], blockNumber }) as bigint;
   if (!id || id !== expectedId) throw new PurchaseCheckError("The listing changed. Refresh the asset and review its price before buying.");
@@ -19,7 +19,10 @@ export async function checkListing(client: Client, market: Contract, registry: C
     throw new PurchaseCheckError("This asset is no longer available at a fixed price.");
   if (row[1] !== expectedPrice || row[1] <= 0n)
     throw new PurchaseCheckError("The price changed. Refresh the asset and review the new price before buying.");
-  if (purchased || row[2].toLowerCase() === buyer.toLowerCase())
+  const legacyPurchases = await Promise.all(legacyMarkets.map(previous => client.readContract({
+    ...previous, functionName: "hasPurchased", args: [token, buyer], blockNumber,
+  })));
+  if (purchased || legacyPurchases.some(Boolean) || row[2].toLowerCase() === buyer.toLowerCase())
     throw new PurchaseCheckError("Your wallet already owns or has access to this asset.");
 }
 

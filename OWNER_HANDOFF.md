@@ -195,3 +195,14 @@ was moved and no historical entitlements were changed by this continuation.
 - `/api/auth/me` correctly returns 401 logged out; capabilities returns 200.
 - Live RPC preflight was read-only. No wallet signing, provider capture, refund,
   deployment, production role provisioning or mainnet change was performed.
+
+
+## Legacy compatibility code now available (2026-10-09)
+
+The shared access checks, old-market auction controls, seller listing cancellation
+and multi-market fixed-price history are implemented. Engineering must configure
+backend LEGACY_MARKETPLACE_ADDRESSES and frontend LEGACY_MARKETPLACES with the same
+reviewed old deployment addresses only when switching the current market. Defaults
+remain empty and no deployment was performed. Record the inventory first, preserve
+old registry/splitter wiring, and verify access/refunds before retiring any UI path.
+Lifetime indexing and production payment integrations remain unfinished.

@@ -9,6 +9,7 @@ import {
   useAccount,
   useWaitForTransactionReceipt,
   useReadContract,
+  useReadContracts,
   useSwitchChain,
   usePublicClient,
   useWriteContract,
@@ -16,10 +17,11 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { polygonAmoy } from "viem/chains";
 import AuctionPanel from "./AuctionPanel";
+import LegacyListing from "./LegacyListing";
 import Web2Checkout from "./Web2Checkout";
 import Reviews from "./Reviews";
 import { checkListing, checkGas, confirmedReceipt, PurchaseCheckError } from "@/lib/blockchain/purchaseSafety";
-import { marketplaceContract, mockUSDCContract, knowledgeAssetContract } from "@/lib/blockchain/contracts";
+import { marketplaceContract, mockUSDCContract, knowledgeAssetContract, legacyMarketplaceContracts, entitlementMarketplaceContracts } from "@/lib/blockchain/contracts";
 
 import {
   useIsListed,
@@ -105,9 +107,14 @@ export default function AssetCard({
   const { data: auctionIdData } = useReadContract({ ...marketplaceContract,
     chainId: polygonAmoy.id, functionName: "tokenToAuction", args: [tokenId], query: { refetchInterval: 10000 } });
   const auctionId = (auctionIdData as bigint | undefined) ?? 0n;
-  const { data: purchased } = useReadContract({ ...marketplaceContract,
-    chainId: polygonAmoy.id, functionName: "hasPurchased", args: [tokenId, connectedAddress],
-    query: { enabled: !!connectedAddress, refetchInterval: 10000 } });
+  const { data: purchases, isError: purchaseLookupFailed, isPending: purchaseLookupPending } = useReadContracts({
+    allowFailure: false,
+    contracts: entitlementMarketplaceContracts.map(market => ({ ...market,
+      chainId: polygonAmoy.id, functionName: "hasPurchased", args: [tokenId, connectedAddress] })),
+    query: { enabled: !!connectedAddress, refetchInterval: 10000 },
+  });
+  const purchased = purchases?.some(Boolean);
+
 
   const {
   data: assetOwner,
@@ -394,7 +401,7 @@ export default function AssetCard({
     if (!publicClient || marketplacePrice <= 0n) return;
     try {
       setBuyStep("approving");
-      await checkListing(publicClient, marketplaceContract, knowledgeAssetContract, tokenId, connectedAddress, BigInt(listingId as bigint), marketplacePrice);
+      await checkListing(publicClient, marketplaceContract, knowledgeAssetContract, tokenId, connectedAddress, BigInt(listingId as bigint), marketplacePrice, legacyMarketplaceContracts);
       const balance = await publicClient.readContract({ ...mockUSDCContract, functionName: "balanceOf", args: [connectedAddress] }) as bigint;
       if (balance < marketplacePrice) throw new PurchaseCheckError("Insufficient MockUSDC. Fund your Amoy wallet before buying.");
       const allowance = await publicClient.readContract({ ...mockUSDCContract, functionName: "allowance", args: [connectedAddress, marketplaceContract.address] }) as bigint;
@@ -405,7 +412,7 @@ export default function AssetCard({
       }
       setBuyStep("buying");
       await checkGas(publicClient, marketplaceContract, "buyAsset", [BigInt(listingId as bigint)], connectedAddress);
-      await checkListing(publicClient, marketplaceContract, knowledgeAssetContract, tokenId, connectedAddress, BigInt(listingId as bigint), marketplacePrice);
+      await checkListing(publicClient, marketplaceContract, knowledgeAssetContract, tokenId, connectedAddress, BigInt(listingId as bigint), marketplacePrice, legacyMarketplaceContracts);
       const hash = await buyAsset(BigInt(listingId as bigint), connectedAddress);
       await confirmedReceipt(publicClient, hash);
       const entitled = await publicClient.readContract({ ...marketplaceContract, functionName: "hasPurchased", args: [tokenId, connectedAddress] });
@@ -802,7 +809,7 @@ export default function AssetCard({
               isUSDCApprovePending ||
               isUSDCApprovalConfirming ||
               isPurchasePending ||
-              isPurchaseConfirming || !listingData || marketplacePrice <= 0n || !asset.active || !!purchased
+              isPurchaseConfirming || purchaseLookupFailed || purchaseLookupPending || !listingData || marketplacePrice <= 0n || !asset.active || !!purchased
             }
             className="w-full rounded-md bg-black px-4 py-2 font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -850,8 +857,10 @@ export default function AssetCard({
 
       {connectedAddress && chainId !== polygonAmoy.id && <button className="mt-4 rounded border p-2" onClick={() => switchChain({ chainId: polygonAmoy.id })}>Switch to Polygon Amoy</button>}
       {purchaseHash && <a className="mt-4 block break-all underline" href={`https://amoy.polygonscan.com/tx/${purchaseHash}`} target="_blank" rel="noreferrer">Check purchase transaction status</a>}
+      {isOwner && legacyMarketplaceContracts.map(market => <LegacyListing key={market.address} tokenId={tokenId} marketAddress={market.address} />)}
+      {purchaseLookupFailed && <p role="alert">Could not verify existing purchase access. Retry before paying.</p>}
       {purchased === true && <p className="mt-4 text-green-700" role="status">Purchase entitlement verified on-chain.</p>}
-      {verified && connectedAddress && !isOwner && <Web2Checkout key={connectedAddress} tokenId={tokenId} buyer={connectedAddress} canStart={!!isListed && !purchased && asset.active} />}
+      {verified && connectedAddress && !isOwner && <Web2Checkout key={connectedAddress} tokenId={tokenId} buyer={connectedAddress} canStart={!!isListed && !purchaseLookupFailed && !purchaseLookupPending && !purchased && asset.active} />}
       {verified && <section className="mt-4 space-y-2"><button className="rounded border p-2" onClick={async () => { setAccessError(""); try { setAccess(await api(`/api/assets/${tokenId}/access`)); } catch (err) { setAccessError(err instanceof Error ? err.message : "Access check failed."); } }}>Check my access</button>{access && <><p>{access.access_granted ? "Your license access is verified." : "No active purchase entitlement for your wallet."}</p>{access.download_path && <button className="block text-blue-700 underline" onClick={async () => { setAccessError(""); try { await downloadAsset(access.download_path!); } catch (err) { setAccessError(err instanceof Error ? err.message : "Download failed."); } }}>Download protected file</button>}{access.file_url && <a className="block text-blue-700 underline" target="_blank" rel="noreferrer" href={access.file_url}>Open asset file</a>}<p className="text-xs text-slate-500">{access.storage_notice}</p></>}{accessError && <p role="alert">{accessError}</p>}</section>}
       <AuctionPanel tokenId={tokenId} auctionId={auctionId} price={asset.priceUSDC} canCreate={isOwner && !isListed && asset.active} />
 

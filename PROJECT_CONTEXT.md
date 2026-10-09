@@ -234,3 +234,32 @@ Checkout now re-fetches a pending server order before opening Razorpay, refuses
 holds/refunds/prior captures and requires another review when payment details change.
 Regression cases cover these boundaries. This improves UI safety, not reservation
 or atomicity between bank and blockchain. Earlier unrelated user files remain untouched.
+
+
+## Migration and settlement verification continuation (2026-10-09)
+
+Implemented shared canonical-receipt verification for backend settlement and refund
+eligibility. A changed transaction/block/status or disappeared receipt fails closed;
+a shallow receipt remains pending. Two blocks remain a test policy, not production
+finality certification.
+
+Legacy access is now configurable through backend LEGACY_MARKETPLACE_ADDRESSES and
+frontend LEGACY_MARKETPLACES. Defaults are empty: no runtime addresses changed. Only
+reviewed old markets on the same chain/KnowledgeAsset registry may be configured.
+Backend download/review access and purchase counts include legacy markets; frontend
+entitlement checks and purchase guards prevent duplicate purchases across them.
+Fiat checkout also checks prior entitlement. Fixed-price activity includes configured
+previous markets and preserves their addresses. Auctions can select old markets for
+bidding/finalization/refunds, and sellers can cancel previous listings on asset cards.
+
+Migration still needs a recorded inventory, matching frontend/backend configuration,
+reviewed deployment, seller cancellation/relisting and live acceptance. Compatibility
+code is not evidence that a deployment or migration occurred. Complete event indexing,
+auction/net lifetime reporting and provider/embedded-wallet adapters remain engineering
+work; they are not owner credential tasks.
+
+Verification: 31 backend tests passed together after Docker/PostgreSQL was restored;
+the additional history regression and three related offline checks then passed.
+Seven frontend test groups pass. Existing 121 local Hardhat tests passed again.
+Read-only Amoy preflight confirms connected RPC and matching registry, but funded
+settlement remains unavailable and Razorpay/signer settings are missing.

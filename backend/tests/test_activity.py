@@ -23,3 +23,22 @@ class ActivityTests(unittest.TestCase):
         self.assertEqual([row["kind"] for row in result["activity"]],["sale","purchase"])
         self.assertEqual(result["next_before_block"],3000)
         market.events.PurchaseCompleted.return_value.get_logs.assert_called_once_with(from_block=3001,to_block=5000)
+
+
+    def test_history_includes_reviewed_previous_markets(self):
+        w3 = MagicMock()
+        w3.eth.chain_id = 80002
+        w3.eth.block_number = 102
+        wallet = "0x" + "11" * 20
+        markets = [MagicMock(address="0x" + "22" * 20), MagicMock(address="0x" + "33" * 20)]
+        for index, market in enumerate(markets):
+            market.events.PurchaseCompleted.return_value.get_logs.return_value = [{
+                "args": {"listingId": 1, "tokenId": index + 1, "buyer": wallet, "amount": 1000000},
+                "blockNumber": 99 + index, "transactionHash": bytes([index])*32, "logIndex": 0,
+            }]
+            market.functions.listings.return_value.call.return_value = (0, 0, "0x" + "44" * 20)
+        w3.eth.contract.side_effect = markets
+        with patch.object(activity.blockchain, "w3", w3), patch.object(activity.blockchain, "entitlement_markets", return_value=markets):
+            result = activity.account_activity(wallet)
+        self.assertEqual([row["marketplace"] for row in result["activity"]], [markets[1].address, markets[0].address])
+        self.assertEqual(len(result["marketplaces"]), 2)

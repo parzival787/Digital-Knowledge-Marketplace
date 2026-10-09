@@ -4,3 +4,5 @@ export const CONTRACTS = {
   RoyaltySplitter: "0x43cE72CEd667bDe9252044451b07ecA1aec2D300",
   Marketplace: "0xDe7bdacb8B3ff631dbcdb09C81c0de7421475A5d",
 } as const;
+// Add reviewed old marketplace addresses here when switching deployments.
+export const LEGACY_MARKETPLACES: readonly `0x${string}`[] = [];

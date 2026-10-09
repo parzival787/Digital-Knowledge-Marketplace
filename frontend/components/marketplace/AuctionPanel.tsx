@@ -13,9 +13,10 @@ import { checkGas, confirmedReceipt, PurchaseCheckError } from "@/lib/blockchain
 
 type Auction = readonly [bigint, bigint, bigint, `0x${string}`, `0x${string}`, boolean, boolean, number, number];
 
-export default function AuctionPanel({ tokenId, auctionId, canCreate, price }: {
-  tokenId: bigint; auctionId: bigint; canCreate: boolean; price: bigint;
+export default function AuctionPanel({ tokenId, auctionId, canCreate, price, marketAddress }: {
+  tokenId: bigint; auctionId: bigint; canCreate: boolean; price: bigint; marketAddress?: `0x${string}`;
 }) {
+  const market = { ...marketplaceContract, address: marketAddress ?? marketplaceContract.address };
   const verified = useVerifiedWallet();
   const { address, chainId } = useAccount();
   const client = usePublicClient({ chainId: polygonAmoy.id });
@@ -24,9 +25,9 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price }: {
   const cache = useQueryClient();
   const [lastAuctionId, setLastAuctionId] = useState(auctionId);
   const resolvedId = auctionId || lastAuctionId;
-  const { data, isError } = useReadContract({ ...marketplaceContract, chainId: polygonAmoy.id,
+  const { data, isError } = useReadContract({ ...market, chainId: polygonAmoy.id,
     functionName: "auctions", args: [resolvedId], query: { enabled: resolvedId > 0n, refetchInterval: 10000 } });
-  const { data: refund } = useReadContract({ ...marketplaceContract, chainId: polygonAmoy.id,
+  const { data: refund } = useReadContract({ ...market, chainId: polygonAmoy.id,
     functionName: "pendingRefunds", args: [address], query: { enabled: !!address, refetchInterval: 10000 } });
   const auction = data as Auction | undefined;
   const [bid, setBid] = useState("");
@@ -57,7 +58,7 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price }: {
     setBusy(true);
     try {
       if (chainId !== polygonAmoy.id) { await switchChainAsync({ chainId: polygonAmoy.id }); }
-      async function send(contract: typeof marketplaceContract | typeof mockUSDCContract, functionName: string, args: readonly unknown[]) {
+      async function send(contract: typeof market | typeof mockUSDCContract, functionName: string, args: readonly unknown[]) {
         await checkGas(client!, contract, functionName, args, address!);
         const hash = await writeContractAsync({ ...contract, functionName, args, account: address, chainId: polygonAmoy.id });
         setTransactionHash(hash);
@@ -71,17 +72,17 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price }: {
         if (amount < minimum) throw new PurchaseCheckError(`Minimum bid is ${formatUnits(minimum, 6)} USDC.`);
         const balance = await client.readContract({ ...mockUSDCContract, functionName: "balanceOf", args: [address] }) as bigint;
         if (balance < amount) throw new PurchaseCheckError("Insufficient USDC balance for this bid.");
-        const allowance = await client.readContract({ ...mockUSDCContract, functionName: "allowance", args: [address, marketplaceContract.address] }) as bigint;
-        if (allowance < amount) { setStatus("Approve USDC in your wallet…"); await send(mockUSDCContract, "approve", [marketplaceContract.address, amount]); }
+        const allowance = await client.readContract({ ...mockUSDCContract, functionName: "allowance", args: [address, market.address] }) as bigint;
+        if (allowance < amount) { setStatus("Approve USDC in your wallet…"); await send(mockUSDCContract, "approve", [market.address, amount]); }
         setStatus("Confirm your bid in your wallet…");
-        await send(marketplaceContract, "placeBid", [resolvedId, amount]);
+        await send(market, "placeBid", [resolvedId, amount]);
       } else if (action === "create") {
         const duration = Number(hours);
         if (!Number.isInteger(duration) || duration < 1 || duration > 720) throw new PurchaseCheckError("Choose a duration from 1 to 720 hours.");
         const block = await client.getBlock();
-        await send(marketplaceContract, "createAuction", [tokenId, price, block.timestamp, block.timestamp + BigInt(duration * 3600), []]);
+        await send(market, "createAuction", [tokenId, price, block.timestamp, block.timestamp + BigInt(duration * 3600), []]);
       } else {
-        await send(marketplaceContract, action === "end" ? "endAuction" : "withdrawRefund", action === "end" ? [resolvedId] : []);
+        await send(market, action === "end" ? "endAuction" : "withdrawRefund", action === "end" ? [resolvedId] : []);
       }
       await cache.invalidateQueries();
       setStatus(action === "bid" ? "Bid confirmed." : action === "create" ? "Auction created." : action === "end" ? "Auction finalized. The winner’s entitlement is recorded on-chain." : "Refund withdrawn.");
@@ -95,6 +96,7 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price }: {
 
   if (!resolvedId && !canCreate && !refund) return null;
   return <section className="mt-5 space-y-3 rounded-lg border p-4" aria-label="Auction">
+    {marketAddress && marketAddress !== marketplaceContract.address && <p className="break-all text-sm">Previous marketplace: {marketAddress}</p>}
     <h3 className="font-semibold">Auction{resolvedId > 0n ? ` #${resolvedId}` : ""}</h3>
     <p className="text-sm">Every auction transaction needs Amoy test POL for gas. Funding a wallet does not place or reserve a bid.</p>
     <Link className="block underline" href="/funding#crypto">Fund a bid using another cryptocurrency</Link>

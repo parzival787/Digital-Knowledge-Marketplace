@@ -24,7 +24,7 @@ def require_refundable(order, raw):
     if Web3.to_hex(Web3.keccak(hexstr=raw)).lower() != order.settlement_tx_hash.lower():
         raise ValueError("Transaction record mismatch")
     receipt = w3.eth.get_transaction_receipt(order.settlement_tx_hash)
-    if receipt.status != 0 or w3.eth.block_number < receipt.blockNumber + 1:
+    if receipt.status != 0 or not settlement.confirmed_receipt(w3, order.settlement_tx_hash, receipt):
         raise ValueError("Only a confirmed mined revert is eligible; pending or successful transactions must not be refunded")
 
 

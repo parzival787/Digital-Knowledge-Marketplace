@@ -48,3 +48,15 @@ test("two-block receipt verification rejects reorg, disappearance, revert, shall
     await assert.rejects(confirmedReceipt(c, "0xtx"));
   }
 });
+
+
+test("an old marketplace entitlement blocks a duplicate purchase", async () => {
+  const c = client();
+  const read = c.readContract;
+  c.readContract = async args => args.address === "0xold" ? true : read(args);
+  await assert.rejects(checkListing(c, contract, contract, 1n, buyer, 2n, 5n,
+    [{ address: "0xold", abi: [] }]), /already owns or has access/);
+  c.readContract = async args => { if (args.address === "0xold") throw new Error("RPC unavailable"); return read(args); };
+  await assert.rejects(checkListing(c, contract, contract, 1n, buyer, 2n, 5n,
+    [{ address: "0xold", abi: [] }]), /RPC unavailable/);
+});

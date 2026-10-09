@@ -118,8 +118,9 @@ class PaymentTests(unittest.IsolatedAsyncioTestCase):
         account = SimpleNamespace(address="payer")
         market = Mock(address="market")
         market.encode_abi.return_value = "0x1234"
-        receipt = SimpleNamespace(status=1, blockNumber=100)
         w3 = Mock()
+        receipt = SimpleNamespace(status=1, blockNumber=100, blockHash=bytes(32), transactionHash=Web3.keccak(hexstr="0xabcd"))
+        w3.eth.get_block.return_value = SimpleNamespace(hash=bytes(32))
         w3.eth.get_transaction_receipt.return_value = receipt
         w3.eth.block_number = 100
         w3.eth.get_transaction.return_value = {"to": "market", "from": "payer", "input": bytes.fromhex("1234")}
@@ -289,7 +290,8 @@ class PaymentTests(unittest.IsolatedAsyncioTestCase):
             amount_usdc=5, payment_method=PaymentMethod.CARD, status=PaymentStatus.SETTLEMENT_PENDING,
             chain_id=80002, marketplace_address="market", settlement_tx_hash=Web3.to_hex(Web3.keccak(hexstr="0xabcd")))
         w3 = Mock()
-        receipt = SimpleNamespace(status=1, blockNumber=100)
+        receipt = SimpleNamespace(status=1, blockNumber=100, blockHash=bytes(32), transactionHash=Web3.keccak(hexstr="0xabcd"))
+        w3.eth.get_block.return_value = SimpleNamespace(hash=bytes(32))
         w3.eth.get_transaction_receipt.return_value = receipt
         w3.eth.block_number = 101
         with patch.object(settlement, "connection", return_value=(w3, None, SimpleNamespace(address="market"))):
