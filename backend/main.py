@@ -33,6 +33,7 @@ from services.auth import router as auth_router, setup_auth, current_user, walle
 from services.pgvector_client import get_conn
 from services.reviews import router as reviews_router
 from services.content_security import seal, unseal, master_key
+from services.payments.transak import router as transak_router, setup_transak
 
 
 
@@ -40,6 +41,7 @@ from services.content_security import seal, unseal, master_key
 app = FastAPI(title="DKM API", version="1.0.0")
 app.include_router(auth_router)
 app.include_router(reviews_router)
+app.include_router(transak_router)
 
 
 @app.exception_handler(DuplicateUploadError)
@@ -77,6 +79,7 @@ app.add_middleware(
 async def startup():
     await setup_tables()
     await setup_auth()
+    await setup_transak()
     if os.getenv("SETTLEMENT_ENABLED") == "true":
         from services.payments.settlement import settlement_worker
         app.state.settlement_task = asyncio.create_task(settlement_worker())

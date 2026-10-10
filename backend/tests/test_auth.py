@@ -360,6 +360,24 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("google_error", response.headers["location"])
             self.assertEqual((await self.client.get("/api/auth/me")).status_code, 401)
 
+    async def test_transak_requires_session_origin_verified_wallet_and_never_grants_access(self):
+        from services.payments import transak
+        from unittest.mock import AsyncMock
+        with patch.object(transak, "create_session", AsyncMock(return_value="https://global-stg.transak.com?sessionId=test")) as create, patch.object(transak, "throttle", AsyncMock()):
+            self.assertEqual((await self.client.post("/api/payments/transak/session")).status_code, 401)
+            await self.signup()
+            self.assertEqual((await self.client.post("/api/payments/transak/session")).status_code, 403)
+            await self.verify()
+            self.assertEqual((await self.client.post("/api/payments/transak/session", headers={"origin": "https://attacker.invalid"})).status_code, 403)
+            response = await self.client.post("/api/payments/transak/session", json={"wallet": "attacker-wallet"})
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(response.json()["grants_access"])
+            self.assertEqual(response.headers["cache-control"], "no-store")
+            self.assertEqual(create.call_args.args[0].lower(), self.wallet.address.lower())
+            conn = await self.isolated()
+            self.assertEqual(await conn.fetchval("SELECT COUNT(*) FROM payment_orders"), 0)
+            await conn.close()
+
 
 if __name__ == "__main__":
     unittest.main()

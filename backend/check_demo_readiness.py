@@ -12,8 +12,11 @@ from services.payments.settlement import SETTLEMENT_ABI, TOKEN_ABI
 
 def main():
     checks = {}
-    for name in ("RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET", "SETTLEMENT_PRIVATE_KEY", "CONTENT_MASTER_KEY"):
-        checks[name] = "present" if os.getenv(name) else "missing"
+    for name in ("RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET", "SETTLEMENT_PRIVATE_KEY", "CONTENT_MASTER_KEY", "TRANSAK_STAGING_API_KEY", "TRANSAK_STAGING_API_SECRET"):
+        value = os.getenv(name)
+        if name.startswith("TRANSAK_STAGING_"):
+            value = value or os.getenv(name.replace("TRANSAK_STAGING_", "transak_").lower())
+        checks[name] = "present" if value else "missing"
     checks["razorpay_test_mode"] = os.getenv("RAZORPAY_KEY_ID", "").startswith("rzp_test_")
     from services.payments.razorpay_provider import RazorpayProvider
     try:

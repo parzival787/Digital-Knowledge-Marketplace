@@ -414,3 +414,20 @@ settlement remains unavailable and Razorpay/signer settings are missing.
 - [ ] Execute live acceptance and produce the final report/demo evidence.
 
 Providing credentials enables these steps; it does not automatically complete them.
+
+
+## Transak local sandbox continuation (2026-10-10)
+
+Added authenticated, origin-protected, rate-limited Transak staging session creation
+and /funding UI. The server binds the destination to the verified account wallet,
+uses fixed staging endpoints, checks returned widget origin, and encrypts the
+shared access-token cache with existing envelope encryption. PostgreSQL locking
+serializes token refresh/session use across workers. No provider event grants access.
+Lowercase transak_api_key/transak_api_secret in the ignored .env are supported.
+Real staging authentication and widget-session creation succeeded; no payment was
+submitted. 35 backend tests plus the new route authorization test, eight frontend
+groups, frontend build and 121 contract tests passed. See LOCAL_PAYMENT_DEMO.md.
+Transak staging TRNSK is not DKM MockUSDC. No chain deployment or end-to-end fiat
+settlement occurred. Crypto routing, embedded wallet, provider reconciliation and
+full history remain engineering work. Onramp/MoonPay signup is no longer required
+for this local Transak development path.
