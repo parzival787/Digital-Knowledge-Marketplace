@@ -280,3 +280,26 @@ Transak staging TRNSK is not DKM MockUSDC. No chain deployment or end-to-end fia
 settlement occurred. Crypto routing, embedded wallet, provider reconciliation and
 full history remain engineering work. Onramp/MoonPay signup is no longer required
 for this local Transak development path.
+
+## Transak order tracking and owner queue (2026-10-10)
+
+Added authenticated account-scoped saved Transak staging orders with manual
+provider-order-ID lookup and refresh. Server GET verifies provider ID, destination
+wallet, BUY direction, Polygon and USDC; responses whitelist bounded decimal
+amounts, provider status and a syntactically valid optional transaction hash.
+Provider PII/URLs are not persisted or exposed. Status remains provider-reported,
+not independent chain verification. No refresh grants entitlement or settles.
+
+Thirty-nine backend tests passed together, including concurrency, lifecycle,
+account isolation and route/auth validation. A decimal-precision rejection case
+was added and all five Transak tests reran successfully. Frontend build/typecheck
+passed; new order-history and existing Transak UI regression tests passed.
+No actual completed provider order was available for live status acceptance.
+
+MASTER_TODO.md is now the current local-college-demo owner/engineering split.
+Older requests for multiple fiat-provider accounts/hosting are superseded.
+The user has not yet answered whether a separate local blockchain setup is allowed.
+No local/public contract deployment or existing Amoy configuration change occurred.
+Combined settlement, routing, embedded wallet, full indexed earnings/history and
+other listed engineering remain incomplete. The required hardhat skill was not
+found in the available skill directories; do not silently bypass contracts rules.

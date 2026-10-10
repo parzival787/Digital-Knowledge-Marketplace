@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import TransakOrders from "@/components/marketplace/TransakOrders";
 import TransakFunding from "@/components/marketplace/TransakFunding";
 import { useAccount, useBalance } from "wagmi";
 import { polygonAmoy } from "viem/chains";
@@ -32,6 +33,7 @@ export default function FundingPage() {
     </section>
     <AccountGate wallet>
       <TransakFunding />
+      <TransakOrders />
       <section className="space-y-3 rounded border p-5" aria-label="Wallet funding availability">
         <h2 className="text-xl font-semibold">Current demo wallet</h2>
         <p className="break-all">Destination wallet: {address}</p>

@@ -378,6 +378,28 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await conn.fetchval("SELECT COUNT(*) FROM payment_orders"), 0)
             await conn.close()
 
+    async def test_transak_history_requires_account_and_verified_refresh(self):
+        from services.payments import transak
+        from unittest.mock import AsyncMock
+        self.assertEqual((await self.client.get("/api/payments/transak/orders")).status_code, 401)
+        self.assertEqual((await self.client.post("/api/payments/transak/orders/refresh", json={"order_id": str(uuid.uuid4())})).status_code, 401)
+        user = await self.signup()
+        with patch.object(transak, "get_conn", self.isolated):
+            await transak.setup_transak()
+            response = await self.client.get("/api/payments/transak/orders")
+            self.assertEqual(response.json(), {"orders": []})
+            self.assertEqual(response.headers["cache-control"], "no-store")
+        self.assertEqual((await self.client.post("/api/payments/transak/orders/refresh", json={"order_id": str(uuid.uuid4())})).status_code, 403)
+        await self.verify()
+        self.assertEqual((await self.client.post("/api/payments/transak/orders/refresh", json={"order_id": "../private"})).status_code, 422)
+        with patch.object(transak, "refresh_order", AsyncMock(return_value={"grants_access": False})) as refresh, patch.object(transak, "throttle", AsyncMock()):
+            order_id = str(uuid.uuid4())
+            response = await self.client.post("/api/payments/transak/orders/refresh", json={"order_id": order_id})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(refresh.call_args.args[0], order_id)
+            self.assertEqual(refresh.call_args.args[1]["id"], user["id"])
+            self.assertFalse(response.json()["grants_access"])
+
 
 if __name__ == "__main__":
     unittest.main()

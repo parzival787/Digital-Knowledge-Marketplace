@@ -41,8 +41,9 @@ workers reuse the token under a database lock instead of invalidating one anothe
 5. Complete the provider’s test steps yourself. Never enter a real payment card.
 6. Return to /funding. Provider completion must NOT grant marketplace access.
    Transak selects USDC but delivers its TRNSK token in staging; this is not the
-   DKM MockUSDC token. The session adapter does not claim provider-order tracking,
-   settlement, a marketplace receipt, or entitlement.
+   DKM MockUSDC token. Enter the provider order ID in Verify sandbox order to persist and refresh
+   its server-verified status. This is not settlement, a marketplace receipt,
+   or entitlement.
 
 If session creation fails, check the Transak staging domain/IP allowlists. The
 adapter uses the actual request peer IP, never an untrusted forwarded header;
@@ -76,7 +77,7 @@ These interactive MetaMask transactions have not been performed in this run.
   seller proceeds. Arbitrary fiat payouts or seller-selected payout tokens are
   not implemented. Provider fees are reviewed in provider checkout, not a new
   persisted DKM all-in asset quote.
-- Provider order reconciliation, net lifetime/auction history, and other remaining
+- Automatic provider order reconciliation, net lifetime/auction history, and other remaining
   roadmap engineering are still open. Production hosting/audit work is outside
   this local-demo run and is not claimed complete.
 

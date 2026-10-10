@@ -29,18 +29,29 @@ class TransakTests(unittest.IsolatedAsyncioTestCase):
         config.start(); self.addCleanup(config.stop)
         mock = patch.object(transak, "get_conn", connect)
         mock.start(); self.addCleanup(mock.stop)
+        conn = await connect()
+        await conn.execute("CREATE TABLE app_users (id BIGINT PRIMARY KEY); INSERT INTO app_users VALUES (1),(2)")
+        await conn.close()
         await transak.setup_transak()
         self.refreshes = 0
         self.sessions = 0
         self.bad_url = False
         self.fail = False
         self.token_expired = False
+        self.order_id = str(uuid.uuid4())
+        self.order = {"_id": self.order_id, "walletAddress": "0x" + "1" * 40,
+            "isBuyOrSell": "BUY", "network": "polygon", "cryptoCurrency": "USDC",
+            "status": "AWAITING_PAYMENT_FROM_USER", "fiatCurrency": "USD", "fiatAmount": 100,
+            "amountPaid": 0, "totalFeeInFiat": "3.99", "cryptoAmount": None,
+            "transactionHash": "DUMMY_TX_ID", "email": "private@example.invalid"}
         async def handler(request):
             if self.fail:
                 return httpx.Response(401, json={"error": "test-secret"})
             if "refresh-token" in request.url.path:
                 self.refreshes += 1
                 return httpx.Response(200, json={"data": {"accessToken": "secret-token", "expiresAt": time.time() + (-1 if self.token_expired else 3600)}})
+            if request.method == "GET":
+                return httpx.Response(200, json={"data": self.order})
             import json
             body = json.loads(request.content)["widgetParams"]
             self.assertEqual(body["walletAddress"], "0x" + "1" * 40)
@@ -89,3 +100,34 @@ class TransakTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await transak.create_session("0x" + "1" * 40, "not-an-ip")
         self.assertEqual(self.sessions, 0)
+
+    async def test_verified_orders_persist_and_follow_status_without_entitlement(self):
+        user = {"id": 1, "wallet_address": "0x" + "1" * 40}
+        first = await transak.refresh_order(self.order_id, user)
+        self.assertFalse(first["grants_access"])
+        self.assertNotIn("email", first)
+        self.assertIsNone(first["transaction_hash"])
+        for state in ("PENDING_DELIVERY_FROM_TRANSAK", "COMPLETED", "REFUNDED"):
+            self.order["status"] = state
+            self.order["amountPaid"] = 100
+            self.order["transactionHash"] = "0x" + "a" * 64
+            await asyncio.gather(transak.refresh_order(self.order_id, user), transak.refresh_order(self.order_id, user))
+            saved = await transak.orders(user)
+            self.assertEqual(len(saved["orders"]), 1)
+            self.assertEqual(saved["orders"][0]["status"], state)
+            self.assertFalse(saved["orders"][0]["grants_access"])
+        self.assertEqual((await transak.orders({"id": 2}))["orders"], [])
+        with self.assertRaises(ValueError):
+            await transak.refresh_order(self.order_id, {"id": 2, "wallet_address": user["wallet_address"]})
+
+    async def test_wrong_wallet_route_identity_or_amount_never_saves(self):
+        user = {"id": 1, "wallet_address": "0x" + "1" * 40}
+        original = dict(self.order)
+        for change in ({"walletAddress": "0x" + "2" * 40}, {"network": "ethereum"},
+                       {"_id": str(uuid.uuid4())}, {"isBuyOrSell": "SELL"},
+                       {"cryptoCurrency": "ETH"}, {"amountPaid": "NaN"},
+                       {"totalFeeInFiat": -1}, {"cryptoAmount": "1e-1000000"}, {"status": "<script>"}):
+            self.order = {**original, **change}
+            with self.assertRaises(ValueError):
+                await transak.refresh_order(self.order_id, user)
+        self.assertEqual((await transak.orders(user))["orders"], [])
