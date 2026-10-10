@@ -6,15 +6,14 @@ Older roadmap documents retain historical findings, not the current owner queue.
 
 ## What you need to do now, in order
 
-### 1. Restore the contract-work skill
+### 1. Contract tooling — resolved, no owner action
 
-The required hardhat skill is not installed in the available skill directories.
-Provide its SKILL.md path or enable it so contract tests can follow
-contracts/AGENTS.md. No request to create a separate local chain is pending now.
+The hardhat skill was found in contracts/.agents/skills/hardhat/SKILL.md.
+The matching ethers/Mocha skill is bundled with the installed Hardhat package.
+The previous missing-skill request was an incomplete search and is withdrawn.
 
-The updated design separates payment execution from blockchain recording.
-Amoy is not a universal routing requirement. No public deployment or replacement
-of existing contracts has been approved; I must prepare and test changes first.
+The provider-independent receipt registry is implemented and locally tested, but
+backend recording, entitlement connection and deployment remain engineering work.
 
 ### 2. Prepare two test participants
 
@@ -120,3 +119,12 @@ outside the current local-demo run. They are not needed to test the existing app
 The project is complete only when the agreed demo requirements are implemented
 and the full buyer/seller acceptance matrix passes. Working credentials and unit
 tests do not by themselves satisfy end-to-end fiat or cross-chain settlement.
+
+## Blockchain recording source (2026-10-10)
+
+Located and read both Hardhat skills; the earlier skill blocker is resolved.
+Added a standalone PaymentReceiptRegistry with authorized recorder roles,
+separate payment/payout denominations, immutable sandbox classification, duplicate
+internal/provider-reference rejection and terminal refund/chargeback records.
+It does not move funds or grant access. Existing deployments are untouched.
+See PAYMENT_RECORDING.md for evidence rules and the unfinished backend connection.

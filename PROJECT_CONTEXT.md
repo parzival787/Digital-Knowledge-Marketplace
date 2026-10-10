@@ -327,3 +327,15 @@ the new blockchain attestation/access integration remain unfinished. Contract-te
 work is blocked by the missing hardhat skill required by contracts/AGENTS.md; the
 owner has been asked for its location. No contract deployment was authorized or
 performed by the latest clarification.
+
+## Blockchain recording source (2026-10-10)
+
+Located and read both Hardhat skills; the earlier skill blocker is resolved.
+Added a standalone PaymentReceiptRegistry with authorized recorder roles,
+separate payment/payout denominations, immutable sandbox classification, duplicate
+internal/provider-reference rejection and terminal refund/chargeback records.
+It does not move funds or grant access. Existing deployments are untouched.
+See PAYMENT_RECORDING.md for evidence rules and the unfinished backend connection.
+
+Final verification: compilation, contract TypeScript checking and all 128 local
+contract tests passed (121 existing plus seven receipt-registry cases).
