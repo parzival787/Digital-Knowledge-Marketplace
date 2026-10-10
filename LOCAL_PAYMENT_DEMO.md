@@ -83,3 +83,17 @@ These interactive MetaMask transactions have not been performed in this run.
 
 The local app is suitable for testing these separate flows, not for claiming a
 flawless end-to-end UPI or arbitrary-crypto marketplace payment.
+
+
+## Seller withdrawal sandbox
+
+In Account, save the desired fiat payout currency, then select Open Transak
+withdrawal sandbox. The backend uses the saved account preference. Network,
+crypto asset and actual payout eligibility are determined inside the provider.
+Use test tokens and test bank/card details only; DKM MockUSDC is not accepted.
+No withdrawal is initiated merely by opening the provider session.
+
+Preference saving does not alter existing sale prices or convert seller proceeds.
+USD/EUR/INR/IDR preference choices do not certify route availability. The hosted
+SELL session for EUR was API-tested, but completing a withdrawal and recording a
+purchase/payment on-chain remain untested/unimplemented respectively.

@@ -54,6 +54,12 @@ class TransakTests(unittest.IsolatedAsyncioTestCase):
                 return httpx.Response(200, json={"data": self.order})
             import json
             body = json.loads(request.content)["widgetParams"]
+            if body["productsAvailed"] == "SELL":
+                self.assertEqual(body["fiatCurrency"], "EUR")
+                self.assertNotIn("walletAddress", body)
+                self.assertNotIn("network", body)
+                self.sessions += 1
+                return httpx.Response(200, json={"data": {"widgetUrl": "https://global-stg.transak.com?sessionId=sell"}})
             self.assertEqual(body["walletAddress"], "0x" + "1" * 40)
             self.assertTrue(body["disableWalletAddressForm"])
             self.assertEqual(body["network"], "polygon")
@@ -131,3 +137,10 @@ class TransakTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ValueError):
                 await transak.refresh_order(self.order_id, user)
         self.assertEqual((await transak.orders(user))["orders"], [])
+
+    async def test_payout_session_uses_sell_and_no_forced_blockchain(self):
+        url = await transak.create_session("0x" + "1" * 40, "127.0.0.1", payout_currency="EUR")
+        self.assertTrue(url.startswith("https://global-stg.transak.com?"))
+        with self.assertRaises(ValueError):
+            await transak.create_session("0x" + "1" * 40, "127.0.0.1", payout_currency="INVALID")
+        self.assertEqual(self.sessions, 1)

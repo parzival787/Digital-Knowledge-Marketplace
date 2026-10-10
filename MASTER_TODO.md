@@ -6,16 +6,15 @@ Older roadmap documents retain historical findings, not the current owner queue.
 
 ## What you need to do now, in order
 
-### 1. Confirm the separate local blockchain demo
+### 1. Restore the contract-work skill
 
-Answer the pending question: may we create a separate local blockchain and test
-contracts, without touching existing Amoy deployments or assets?
+The required hardhat skill is not installed in the available skill directories.
+Provide its SKILL.md path or enable it so contract tests can follow
+contracts/AGENTS.md. No request to create a separate local chain is pending now.
 
-Recommended: yes. Local simulated funds can exercise settlement, fee distribution
-and buyer access. Transak remains a separate sandbox because an external provider
-cannot deliver tokens into our localhost chain. This is not a real UPI conversion.
-If you choose Amoy only, the current deployment cannot demonstrate the new funded
-settlement method without a reviewed testnet deployment.
+The updated design separates payment execution from blockchain recording.
+Amoy is not a universal routing requirement. No public deployment or replacement
+of existing contracts has been approved; I must prepare and test changes first.
 
 ### 2. Prepare two test participants
 
@@ -85,8 +84,8 @@ Completed in the current Transak work:
 - [x] Backend concurrency/isolation/failure tests and frontend regression coverage.
 
 Still open; I must not describe these as owner-only tasks:
-- [ ] Separate local chain setup and full UI settlement acceptance, if approved.
-- [ ] Compatible combined fiat settlement; TRNSK is not our deployed MockUSDC.
+- [ ] Blockchain payment-attestation/access integration and complete UI acceptance.
+- [ ] Compatible combined fiat payment/payout verification and blockchain recording.
 - [ ] Supported crypto swap/bridge execution. No arbitrary-token promise and no
   supported LI.FI route into this Amoy custom-token deployment.
 - [ ] Persisted, expiring all-in asset quotes and insufficient-output handling.
@@ -100,6 +99,15 @@ The new Transak history is provider-verified, not independently chain-verified.
 It is limited to the 50 most recently checked saved orders. Users enter the provider
 order ID; automatic webhook discovery is not implemented. Provider-reported fees
 are not a pre-purchase DKM asset quote, and refreshing does not trigger settlement.
+
+## Latest seller preference implementation
+
+Account now saves a requested payout currency and can open Transak SELL sandbox.
+USDC/USD/EUR/INR/IDR are preference choices, not a guarantee that all routes work.
+Saving does not change active listing prices or cause automatic conversion.
+Enable SELL in the Transak partner portal if necessary. Test only documented
+sandbox payout details. EUR session creation worked, but no withdrawal completed.
+This is separate from completing and recording a marketplace purchase.
 
 ## Do not spend time on these now
 

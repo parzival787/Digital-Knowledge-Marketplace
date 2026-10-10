@@ -5,7 +5,8 @@ import json
 import re
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+from typing import Literal
 import os
 import time
 from urllib.parse import urlsplit
@@ -24,6 +25,7 @@ async def setup_transak():
     conn = await get_conn()
     try:
         await conn.execute("""
+            ALTER TABLE app_users ADD COLUMN IF NOT EXISTS payout_currency TEXT NOT NULL DEFAULT 'USDC';
             CREATE TABLE IF NOT EXISTS transak_staging_tokens (
                 credential_hash TEXT PRIMARY KEY, ciphertext BYTEA NOT NULL,
                 wrapped_key TEXT NOT NULL, expires_at DOUBLE PRECISION NOT NULL
@@ -76,9 +78,18 @@ async def access_token(conn, client, key, secret, fingerprint, row):
     return token
 
 
-async def create_session(wallet, user_ip):
+async def create_session(wallet, user_ip, payout_currency=None):
+    if payout_currency is not None and payout_currency not in ("USD", "EUR", "INR", "IDR"):
+        raise ValueError("Unsupported payout currency preference")
     key, secret = configuration()
     ipaddress.ip_address(user_ip)
+    params = {"apiKey": key, "referrerDomain": ORIGIN,
+              "redirectURL": ORIGIN + ("/account" if payout_currency else "/funding")}
+    if payout_currency:
+        params.update(productsAvailed="SELL", fiatCurrency=payout_currency)
+    else:
+        params.update(productsAvailed="BUY", cryptoCurrencyCode="USDC", network="polygon",
+                      walletAddress=wallet, disableWalletAddressForm=True)
     fingerprint = hashlib.sha256((key + ":" + secret).encode()).hexdigest()
     conn = await get_conn()
     try:
@@ -90,10 +101,7 @@ async def create_session(wallet, user_ip):
                 token = await access_token(conn, client, key, secret, fingerprint, row)
                 data = await provider_json(client, "https://api-gateway-stg.transak.com/api/v2/auth/session",
                     headers={"access-token": token, "x-api-key": key, "x-user-ip": user_ip},
-                    json={"widgetParams": {"apiKey": key, "referrerDomain": ORIGIN,
-                        "productsAvailed": "BUY", "cryptoCurrencyCode": "USDC", "network": "polygon",
-                        "walletAddress": wallet, "disableWalletAddressForm": True,
-                        "redirectURL": ORIGIN + "/funding"}})
+                    json={"widgetParams": params})
                 url = data.get("widgetUrl", "")
                 parsed = urlsplit(url)
                 if parsed.scheme != "https" or parsed.netloc != "global-stg.transak.com" or not parsed.query:
@@ -206,3 +214,44 @@ async def orders(user=Depends(current_user)):
         return {"orders": [{**json.loads(row["receipt"]), "checked_at": row["checked_at"].isoformat()} for row in rows]}
     finally:
         await conn.close()
+
+
+class PayoutPreference(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    currency: Literal["USDC", "USD", "EUR", "INR", "IDR"]
+
+
+@router.get("/payout-preference")
+async def payout_preference(user=Depends(current_user)):
+    conn = await get_conn()
+    try:
+        currency = await conn.fetchval("SELECT payout_currency FROM app_users WHERE id=$1", user["id"])
+        return {"currency": currency, "environment": "staging",
+                "automatic_payout_enabled": False}
+    finally:
+        await conn.close()
+
+
+@router.put("/payout-preference")
+async def save_payout_preference(body: PayoutPreference, user=Depends(current_user)):
+    conn = await get_conn()
+    try:
+        await conn.execute("UPDATE app_users SET payout_currency=$1 WHERE id=$2", body.currency, user["id"])
+    finally:
+        await conn.close()
+    return {"currency": body.currency, "environment": "staging", "automatic_payout_enabled": False}
+
+
+@router.post("/payout-session")
+async def payout_session(request: Request, user=Depends(wallet_user)):
+    await throttle(request, "transak-payout:" + str(user["id"]))
+    preference = await payout_preference(user)
+    if preference["currency"] == "USDC":
+        raise HTTPException(409, "Choose a fiat withdrawal preference first. USDC wallet payments do not require an off-ramp.")
+    try:
+        url = await create_session(user["wallet_address"], request.client.host if request.client else "",
+                                   payout_currency=preference["currency"])
+    except Exception:
+        raise HTTPException(503, "Transak sandbox withdrawal is unavailable. SELL must be enabled by the provider and the selected currency must be supported.") from None
+    return {"widget_url": url, "environment": "staging", "grants_access": False,
+            "automatic_payout_enabled": False, "expires_in_seconds": 300}

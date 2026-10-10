@@ -303,3 +303,27 @@ No local/public contract deployment or existing Amoy configuration change occurr
 Combined settlement, routing, embedded wallet, full indexed earnings/history and
 other listed engineering remain incomplete. The required hardhat skill was not
 found in the available skill directories; do not silently bypass contracts rules.
+
+## Flexible payment requirement and seller withdrawal (2026-10-10)
+
+The owner clarified that Amoy was an example, not a mandatory settlement route.
+Target design separates buyer payment method, seller pricing/payout currency and
+blockchain purchase records. Not every route must convert through Polygon USDC.
+Off-chain payment records are backend attestations, not independent proof of bank
+settlement. Do not place bank/card/identity details on-chain.
+
+Implemented per-account payout currency preference (USDC/USD/EUR/INR/IDR) and a
+Transak hosted SELL sandbox entry on Account. Preference saving does not change
+existing prices, active listings, settlement token or enable automatic payouts.
+SELL session delegates network/asset selection and payout eligibility to Transak;
+BUY sessions retain their original verified-wallet destination. Bank details stay
+with the provider. The provider must enable SELL and support the requested fiat.
+An actual staging EUR SELL session was created successfully, without submitting a
+withdrawal. 37 auth/payment/Transak backend tests, three relevant frontend tests,
+and the frontend build/typecheck passed. Existing unrelated user edits preserved.
+
+Full multi-method purchase execution, pricing/fee quotes, payout verification and
+the new blockchain attestation/access integration remain unfinished. Contract-test
+work is blocked by the missing hardhat skill required by contracts/AGENTS.md; the
+owner has been asked for its location. No contract deployment was authorized or
+performed by the latest clarification.

@@ -400,6 +400,36 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(refresh.call_args.args[1]["id"], user["id"])
             self.assertFalse(response.json()["grants_access"])
 
+    async def test_seller_preference_is_scoped_and_not_payout_authorization(self):
+        from services.payments import transak
+        from unittest.mock import AsyncMock
+        path = "/api/payments/transak/payout-preference"
+        self.assertEqual((await self.client.get(path)).status_code, 401)
+        alice = await self.signup()
+        with patch.object(transak, "get_conn", self.isolated):
+            await transak.setup_transak()
+            self.assertEqual((await self.client.get(path)).json()["currency"], "USDC")
+            self.assertEqual((await self.client.put(path, json={"currency": "EUR"}, headers={"origin": "https://attacker.invalid"})).status_code, 403)
+            for body in ({"currency": "XYZ"}, {"currency": "EUR", "user_id": 2}):
+                self.assertEqual((await self.client.put(path, json=body)).status_code, 422)
+            response = await self.client.put(path, json={"currency": "EUR"})
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(response.json()["automatic_payout_enabled"])
+            self.assertEqual((await self.client.post("/api/payments/transak/payout-session")).status_code, 403)
+            await self.verify()
+            with patch.object(transak, "create_session", AsyncMock(return_value="https://global-stg.transak.com?sessionId=sell")) as create, patch.object(transak, "throttle", AsyncMock()):
+                response = await self.client.post("/api/payments/transak/payout-session", json={"currency": "USD"})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(create.call_args.kwargs["payout_currency"], "EUR")
+                self.assertFalse(response.json()["automatic_payout_enabled"])
+            await self.client.post("/api/auth/logout")
+            await self.signup("bob")
+            self.assertEqual((await self.client.get(path)).json()["currency"], "USDC")
+            conn = await self.isolated()
+            self.assertEqual(await conn.fetchval("SELECT payout_currency FROM app_users WHERE id=$1", alice["id"]), "EUR")
+            self.assertEqual(await conn.fetchval("SELECT COUNT(*) FROM payment_orders"), 0)
+            await conn.close()
+
 
 if __name__ == "__main__":
     unittest.main()
