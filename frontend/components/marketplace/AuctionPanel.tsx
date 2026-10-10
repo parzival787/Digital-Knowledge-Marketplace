@@ -1,6 +1,7 @@
 "use client";
 
 import { useVerifiedWallet } from "@/providers/AuthProvider";
+import { usePaymentCapabilities, marketRouteAvailable } from "@/lib/api/capabilities";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAccount, usePublicClient, useReadContract, useSwitchChain, useWriteContract } from "wagmi";
@@ -17,6 +18,9 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price, mar
   tokenId: bigint; auctionId: bigint; canCreate: boolean; price: bigint; marketAddress?: `0x${string}`;
 }) {
   const market = { ...marketplaceContract, address: marketAddress ?? marketplaceContract.address };
+  const paymentCapabilities = usePaymentCapabilities();
+  const auctionAvailable = !paymentCapabilities.isError && marketRouteAvailable(paymentCapabilities.data, "auction", market.address, mockUSDCContract.address);
+  const newPaymentsAvailable = auctionAvailable && !paymentCapabilities.data?.markets.find(value => value.address.toLowerCase() === market.address.toLowerCase())?.paused;
   const verified = useVerifiedWallet();
   const { address, chainId } = useAccount();
   const client = usePublicClient({ chainId: polygonAmoy.id });
@@ -53,6 +57,8 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price, mar
 
   async function transact(action: "bid" | "create" | "end" | "refund") {
     setError("");
+    if (!auctionAvailable) { setError("Auction deployment could not be verified. Retry availability checks before signing."); return; }
+    if ((action === "bid" || action === "create") && !newPaymentsAvailable) { setError("Marketplace is paused for new bids and auctions."); return; }
     if (!verified) { setError("Log in and verify your connected wallet in Account first."); return; }
     if (!address || !client) { setError("Connect your wallet first."); return; }
     setBusy(true);
@@ -96,6 +102,7 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price, mar
 
   if (!resolvedId && !canCreate && !refund) return null;
   return <section className="mt-5 space-y-3 rounded-lg border p-4" aria-label="Auction">
+    {!auctionAvailable && <p role="status">Auction availability could not be verified. Actions are disabled until the deployment is checked.</p>}
     {marketAddress && marketAddress !== marketplaceContract.address && <p className="break-all text-sm">Previous marketplace: {marketAddress}</p>}
     <h3 className="font-semibold">Auction{resolvedId > 0n ? ` #${resolvedId}` : ""}</h3>
     <p className="text-sm">Every auction transaction needs Amoy test POL for gas. Funding a wallet does not place or reserve a bid.</p>
@@ -111,18 +118,18 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price, mar
       <p>{auction[6] ? "Auction completed" : ended ? "Auction ended — ready to finalize" : !started ? "Bidding has not started" : `Time remaining: ${Math.floor(remaining / 3600)}h ${Math.floor(remaining % 3600 / 60)}m ${remaining % 60}s`}</p>
       {auction[5] && !ended && started && !seller && <>
         <label className="block">Your bid (USDC)<input className="mt-1 w-full rounded border p-2" inputMode="decimal" value={bid} onChange={e => setBid(e.target.value)} placeholder={formatUnits(minimum, 6)} /></label>
-        <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy || !address} onClick={() => transact("bid")}>Place bid</button>
+        <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy || !address || !newPaymentsAvailable} onClick={() => transact("bid")}>Place bid</button>
       </>}
-      {auction[5] && ended && <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy || !address} onClick={() => transact("end")}>Finalize auction</button>}
+      {auction[5] && ended && <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy || !address || !auctionAvailable} onClick={() => transact("end")}>Finalize auction</button>}
     </>}
     {!auctionId && canCreate && <>
       <p>Starting price: {formatUnits(price, 6)} USDC. No co-author royalties.</p>
       <label className="block">Duration (hours)<input className="mt-1 w-full rounded border p-2" type="number" min="1" max="720" value={hours} onChange={e => setHours(e.target.value)} /></label>
-      <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy} onClick={() => transact("create")}>Create auction</button>
+      <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy || !newPaymentsAvailable} onClick={() => transact("create")}>Create auction</button>
     </>}
     {(refund as bigint | undefined ?? 0n) > 0n && <>
       <p>You have {formatUnits(refund as bigint, 6)} USDC in refundable bids across the marketplace.</p>
-      <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy} onClick={() => transact("refund")}>Withdraw bid refund</button>
+      <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy || !auctionAvailable} onClick={() => transact("refund")}>Withdraw bid refund</button>
     </>}
     {!address && <p>Connect your wallet to bid or finalize.</p>}
     {transactionHash && <a className="block underline" target="_blank" rel="noreferrer" href={`https://amoy.polygonscan.com/tx/${transactionHash}`}>Check auction transaction status</a>}

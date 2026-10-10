@@ -2,6 +2,7 @@
 import Link from "next/link";
 import TransakOrders from "@/components/marketplace/TransakOrders";
 import TransakFunding from "@/components/marketplace/TransakFunding";
+import PaymentCapabilities from "@/components/marketplace/PaymentCapabilities";
 import { useAccount, useBalance } from "wagmi";
 import { polygonAmoy } from "viem/chains";
 import { AccountGate } from "@/providers/AuthProvider";
@@ -11,6 +12,7 @@ export default function FundingPage() {
   const { data } = useBalance({ address, chainId: polygonAmoy.id });
   return <main className="mx-auto max-w-2xl space-y-6 px-6 py-12">
     <h1 className="text-3xl font-bold">Add USDC</h1>
+    <PaymentCapabilities />
     <p>Choose how to fund your wallet. Marketplace purchases are priced in USDC; POL pays the network fee.</p>
     <section className="space-y-2 rounded-xl border p-5" aria-labelledby="fees-title">
       <h2 id="fees-title" className="text-xl font-semibold">What you will pay</h2>

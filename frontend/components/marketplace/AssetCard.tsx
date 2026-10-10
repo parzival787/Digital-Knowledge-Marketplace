@@ -17,6 +17,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { polygonAmoy } from "viem/chains";
 import AuctionPanel from "./AuctionPanel";
+import { usePaymentCapabilities, marketRouteAvailable } from "@/lib/api/capabilities";
 import LegacyListing from "./LegacyListing";
 import Web2Checkout from "./Web2Checkout";
 import Reviews from "./Reviews";
@@ -74,6 +75,8 @@ export default function AssetCard({
   saleMode?: string;
 }) {
   const verified = useVerifiedWallet();
+  const paymentCapabilities = usePaymentCapabilities();
+  const purchaseAvailable = !paymentCapabilities.isError && marketRouteAvailable(paymentCapabilities.data, "fixed_price", marketplaceContract.address, mockUSDCContract.address);
   const { writeContractAsync } = useWriteContract();
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState("");
@@ -369,6 +372,7 @@ export default function AssetCard({
    */
 
   async function handleBuy() {
+    if (!purchaseAvailable) { setBuyError("Payment route could not be verified. Check payment availability before retrying."); return; }
     if (!verified) { setBuyError("Log in and verify your connected wallet in Account first."); return; }
     setBuyError("");
 
@@ -800,11 +804,13 @@ export default function AssetCard({
             </span>{" "}
             {formatUSDC(marketplacePrice)} USDC
           </div>
+          {!purchaseAvailable && <p role="status">Purchase availability is not verified. Check supported routes on the funding page before paying.</p>}
 
           <button
             type="button"
             onClick={handleBuy}
             disabled={
+              !purchaseAvailable ||
               buyStep !== "idle" ||
               isUSDCApprovePending ||
               isUSDCApprovalConfirming ||

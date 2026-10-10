@@ -7,8 +7,8 @@ export default function TransakFunding() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
-    api<{ configured: boolean }>("/api/payments/transak/status")
-      .then(value => setConfigured(value.configured)).catch(() => setError("Could not check Transak availability. Reload to retry."));
+    api<{ routes: { transak_buy: { enabled: boolean } } }>("/api/capabilities")
+      .then(value => setConfigured(value.routes.transak_buy.enabled)).catch(() => setError("Could not check Transak availability. Reload to retry."));
   }, []);
   async function start() {
     if (busy) return;

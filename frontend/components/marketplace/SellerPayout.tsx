@@ -14,9 +14,9 @@ export default function SellerPayout() {
   useEffect(() => {
     Promise.all([
       api<{ currency: string }>("/api/payments/transak/payout-preference"),
-      api<{ configured: boolean }>("/api/payments/transak/status"),
+      api<{ routes: { transak_sell: { enabled: boolean } } }>("/api/capabilities"),
     ]).then(([preference, status]) => {
-      setCurrency(preference.currency); setSaved(preference.currency); setConfigured(status.configured);
+      setCurrency(preference.currency); setSaved(preference.currency); setConfigured(status.routes.transak_sell.enabled);
     }).catch(() => setError("Could not load payout settings. Reload before changing them."));
   }, []);
   async function save() {

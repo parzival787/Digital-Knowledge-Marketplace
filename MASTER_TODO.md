@@ -1,5 +1,11 @@
 # DKM: current owner and engineering checklist
 
+Latest execution update 2026-10-11: use HUMAN_ACTION_REQUIRED.md for the owner
+queue and ENGINEERING_PLAN.md for milestone order. Embedded wallets are conditional
+on the rubric under the latest brief. Baseline tests reran successfully; shared
+server route capabilities and frontend gating are implemented and tested. This
+does not complete quotes, recording, indexing or interactive acceptance.
+
 Updated 2026-10-10. This replaces earlier requests to acquire several providers
 or prepare production hosting. Current scope: a local college-project demo.
 Older roadmap documents retain historical findings, not the current owner queue.

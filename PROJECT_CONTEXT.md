@@ -1,5 +1,21 @@
 # DKM continuation — 2026-09-30
 
+## Current continuation (2026-10-11; supersedes stale blocker notes below)
+
+The PDF baseline and active draft PR #1 at 6612caf were verified against GitHub
+and local git. Continue codex/dkm-payment-persistence; preserve unrelated changes.
+ENGINEERING_PLAN.md now orders the latest 19-phase local-demo brief;
+HUMAN_ACTION_REQUIRED.md isolates real human dependencies. Embedded wallets and
+research are conditional, not mandatory blockers without the rubric.
+
+The existing /api/capabilities now models fixed-price, auctions, Transak BUY/SELL,
+Razorpay test, unverified UPI, unsupported crypto routes and pending audit registry.
+Read-only deployment wiring checks gate purchase availability. Frontend purchase,
+auction, funding and payout controls consume server capability state; mismatched
+market/token/network or failed checks fail closed. Per-transaction checks remain.
+No deployment or token transfer was performed. TEST_EVIDENCE.md records current
+baseline and milestone results. All other remaining engineering stays open.
+
 The full capstone roadmap is still unfinished. Earlier handoff documents described
 an in-memory mock payment service; this checkout extends that implementation.
 

@@ -535,10 +535,10 @@ async def dashboard(user=Depends(current_user)):
 
 
 @app.get("/api/capabilities")
-async def capabilities():
-    configured = bool(os.getenv("RAZORPAY_KEY_ID", "").startswith("rzp_test_") and os.getenv("RAZORPAY_KEY_SECRET") and os.getenv("SETTLEMENT_ENABLED") == "true" and os.getenv("SETTLEMENT_PRIVATE_KEY"))
-    return {"fiat_configured": configured, "fiat_message": "Test checkout configured; availability is verified against each listing before payment." if configured else "UPI/card test checkout awaits settlement deployment and provider credentials.",
-            "bridge_available": False, "bridge_message": "Combined swap/bridge checkout is not available on Polygon Amoy.", "chain_id": 80002}
+async def capabilities(response: Response):
+    from services.payments.capabilities import payment_capabilities
+    response.headers["Cache-Control"] = "no-store"
+    return await asyncio.to_thread(payment_capabilities)
 
 
 @app.get("/api/assets/{token_id}/payment")
