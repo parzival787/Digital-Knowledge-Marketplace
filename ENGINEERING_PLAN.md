@@ -40,5 +40,16 @@ codex/dkm-payment-persistence. Preserve existing implementations and deployments
 8. Update current documentation and final human acceptance script; commit logical
    milestones to existing PR. Keep incomplete and blocked items explicit.
 
+## Milestone progress
+
+- Shared capabilities: implemented and locally tested in 3c486fa; deployment
+  wiring also checked read-only. No new deployment.
+- Fixed-price wallet quote review: implemented with integer token accounting,
+  seller-paid fee/royalties, persisted five-minute terms and account-bound
+  revalidation before approval/purchase. This is not an atomic contract reservation.
+- Phase 3 remains partial: provider funding/FX/payout quotes remain unavailable;
+  Razorpay quote expiry and late capture policy still need integration. Unknown
+  external costs are null, never zero. Auction amounts remain their own bid flow.
+
 Completion requires implementation plus the agreed automated and human acceptance
 checks. A milestone commit is not a claim that the entire project is complete.

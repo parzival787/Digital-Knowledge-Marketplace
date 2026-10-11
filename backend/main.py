@@ -34,6 +34,7 @@ from services.pgvector_client import get_conn
 from services.reviews import router as reviews_router
 from services.content_security import seal, unseal, master_key
 from services.payments.transak import router as transak_router, setup_transak
+from services.payments.quotes import router as quotes_router, setup_quotes
 
 
 
@@ -42,6 +43,7 @@ app = FastAPI(title="DKM API", version="1.0.0")
 app.include_router(auth_router)
 app.include_router(reviews_router)
 app.include_router(transak_router)
+app.include_router(quotes_router)
 
 
 @app.exception_handler(DuplicateUploadError)
@@ -60,7 +62,7 @@ async def validation_error(request, exc):
 @app.middleware("http")
 async def private_response_headers(request, call_next):
     response = await call_next(request)
-    if request.url.path.startswith(("/api/auth", "/api/account", "/api/payments", "/api/assets")):
+    if request.url.path.startswith(("/api/auth", "/api/account", "/api/payments", "/api/purchase-quotes", "/api/assets")):
         response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -80,6 +82,7 @@ async def startup():
     await setup_tables()
     await setup_auth()
     await setup_transak()
+    await setup_quotes()
     if os.getenv("SETTLEMENT_ENABLED") == "true":
         from services.payments.settlement import settlement_worker
         app.state.settlement_task = asyncio.create_task(settlement_worker())

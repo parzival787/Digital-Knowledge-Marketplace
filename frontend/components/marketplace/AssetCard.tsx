@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useVerifiedWallet } from "@/providers/AuthProvider";
 import { api, downloadAsset } from "@/lib/api/client";
+import { acceptPurchaseQuote, type PurchaseQuote } from "@/lib/api/quotes";
+import PurchaseQuoteSummary from "./PurchaseQuoteSummary";
 import { useEffect, useState } from "react";
 
 import {
@@ -90,6 +92,7 @@ export default function AssetCard({
 
   const [listingError, setListingError] = useState("");
   const [buyError, setBuyError] = useState("");
+  const [purchaseQuote, setPurchaseQuote] = useState<PurchaseQuote | null>(null);
   const [royaltiesEnabled, setRoyaltiesEnabled] = useState(false);
 
  const [royaltyRecipients, setRoyaltyRecipients] = useState<
@@ -405,6 +408,14 @@ export default function AssetCard({
     if (!publicClient || marketplacePrice <= 0n) return;
     try {
       setBuyStep("approving");
+      if (!purchaseQuote) {
+        setPurchaseQuote(await api<PurchaseQuote>(`/api/purchase-quotes/asset/${tokenId}`, { method: "POST" }));
+        return;
+      }
+      const expected = { buyer: connectedAddress, market: marketplaceContract.address, token: mockUSDCContract.address,
+        tokenId, listingId: BigInt(listingId as bigint), amount: marketplacePrice };
+      try { await acceptPurchaseQuote(purchaseQuote, expected); }
+      catch (error) { setPurchaseQuote(null); throw new PurchaseCheckError(error instanceof Error ? error.message : "Review a new quote."); }
       await checkListing(publicClient, marketplaceContract, knowledgeAssetContract, tokenId, connectedAddress, BigInt(listingId as bigint), marketplacePrice, legacyMarketplaceContracts);
       const balance = await publicClient.readContract({ ...mockUSDCContract, functionName: "balanceOf", args: [connectedAddress] }) as bigint;
       if (balance < marketplacePrice) throw new PurchaseCheckError("Insufficient MockUSDC. Fund your Amoy wallet before buying.");
@@ -416,6 +427,8 @@ export default function AssetCard({
       }
       setBuyStep("buying");
       await checkGas(publicClient, marketplaceContract, "buyAsset", [BigInt(listingId as bigint)], connectedAddress);
+      try { await acceptPurchaseQuote(purchaseQuote, expected); }
+      catch (error) { setPurchaseQuote(null); throw new PurchaseCheckError(error instanceof Error ? error.message : "Review a new quote."); }
       await checkListing(publicClient, marketplaceContract, knowledgeAssetContract, tokenId, connectedAddress, BigInt(listingId as bigint), marketplacePrice, legacyMarketplaceContracts);
       const hash = await buyAsset(BigInt(listingId as bigint), connectedAddress);
       await confirmedReceipt(publicClient, hash);
@@ -805,6 +818,7 @@ export default function AssetCard({
             {formatUSDC(marketplacePrice)} USDC
           </div>
           {!purchaseAvailable && <p role="status">Purchase availability is not verified. Check supported routes on the funding page before paying.</p>}
+          {purchaseQuote && <PurchaseQuoteSummary quote={purchaseQuote} />}
 
           <button
             type="button"
@@ -831,7 +845,7 @@ export default function AssetCard({
               : buyStep === "buying" &&
                 isPurchaseConfirming
               ? "Purchasing Asset..."
-              : `Buy with Crypto - ${formatUSDC(
+              : `${purchaseQuote ? "Accept quote and buy" : "Review purchase"} - ${formatUSDC(
                   marketplacePrice
                 )} USDC`}
           </button>

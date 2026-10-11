@@ -431,5 +431,23 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
             await conn.close()
 
 
+    async def test_purchase_quotes_require_session_wallet_and_origin(self):
+        from services.payments import quotes
+        from unittest.mock import AsyncMock
+        path = "/api/purchase-quotes/asset/1"
+        self.assertEqual((await self.client.post(path)).status_code, 401)
+        user = await self.signup()
+        self.assertEqual((await self.client.post(path)).status_code, 403)
+        await self.verify()
+        self.assertEqual((await self.client.post(path, headers={"origin":"https://attacker.invalid"})).status_code, 403)
+        with patch.object(quotes,"throttle",AsyncMock()), patch.object(quotes,"create_quote",AsyncMock(return_value={"id":"test"})) as create:
+            response = await self.client.post(path, json={"user_id":999,"buyer":"attacker"})
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(response.headers["cache-control"],"no-store")
+            self.assertEqual(create.call_args.args[1]["id"],user["id"])
+            self.assertEqual(create.call_args.args[1]["wallet_address"],self.wallet.address)
+        self.assertEqual((await self.client.post("/api/purchase-quotes/not-a-uuid/accept")).status_code,422)
+
+
 if __name__ == "__main__":
     unittest.main()

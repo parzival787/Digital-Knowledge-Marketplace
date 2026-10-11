@@ -16,6 +16,13 @@ market/token/network or failed checks fail closed. Per-transaction checks remain
 No deployment or token transfer was performed. TEST_EVIDENCE.md records current
 baseline and milestone results. All other remaining engineering stays open.
 
+Fixed-price wallet checkout now persists a five-minute account-bound quote from
+deployed listing/splitter state, using integer base units and Solidity rounding.
+UI shows seller gross, platform deduction, royalties and net; there is no extra
+buyer DKM fee. Acceptance rechecks terms, expiry, wallet and old/new entitlements
+before approval and again before purchase. Funding/FX/payout costs remain explicitly
+unquoted. This is not a reservation or an atomic on-chain expected-price guard.
+
 The full capstone roadmap is still unfinished. Earlier handoff documents described
 an in-memory mock payment service; this checkout extends that implementation.
 
