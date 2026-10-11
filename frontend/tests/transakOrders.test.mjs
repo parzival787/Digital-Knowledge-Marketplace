@@ -44,6 +44,11 @@ test("sandbox history verifies through backend, preserves amounts, and reports f
   assert.match(view, /100/);
   assert.doesNotMatch(view, /103.99/);
   assert.match(view, /not independent blockchain verification/);
+  receipt.verification_state = "review_required";
+  receipt.observed_status = "PROCESSING";
+  receipt.refresh_error = "Automatic provider refresh failed";
+  assert.match(JSON.stringify(render()), /Review required/);
+  assert.match(JSON.stringify(render()), /Automatic provider refresh failed/);
   fail = true; state[1] = receipt.order_id;
   find(render(), "form").props.onSubmit({ preventDefault() {} });
   await new Promise(resolve => setImmediate(resolve));

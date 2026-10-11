@@ -1,5 +1,7 @@
 """Transak staging wallet-funding sessions; never a marketplace payment confirmation."""
 import hashlib
+import asyncio
+import logging
 import ipaddress
 import json
 import re
@@ -34,7 +36,11 @@ async def setup_transak():
                 order_id UUID PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES app_users(id),
                 wallet_address TEXT NOT NULL, receipt JSONB NOT NULL,
                 checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
+            );
+            ALTER TABLE transak_staging_orders ADD COLUMN IF NOT EXISTS next_check_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+            ALTER TABLE transak_staging_orders ADD COLUMN IF NOT EXISTS refresh_error TEXT;
+            CREATE INDEX IF NOT EXISTS transak_orders_recheck ON transak_staging_orders(next_check_at);
+            CREATE INDEX IF NOT EXISTS transak_orders_account ON transak_staging_orders(user_id,checked_at DESC)
         """)
     finally:
         await conn.close()
@@ -172,6 +178,24 @@ def verified_order(data, order_id, wallet):
     return result
 
 
+def reconcile_receipt(previous, current):
+    """Unordered provider observations cannot silently undo terminal evidence."""
+    current = {**current, "verification_state": "provider_verified"}
+    if not previous:
+        return current
+    old, new = previous["status"], current["status"]
+    terminal = {"COMPLETED", "REFUNDED", "FAILED", "CANCELLED", "EXPIRED"}
+    stable_fields = ("fiat_currency", "fiat_amount", "crypto_amount", "amount_paid", "provider_fee", "transaction_hash")
+    changed_completion = old == "COMPLETED" and new == "COMPLETED" and any(
+        previous.get(field) != current.get(field) for field in stable_fields)
+    if (previous.get("verification_state") == "review_required" or changed_completion or
+            old in terminal and new != old and not (old == "COMPLETED" and new == "REFUNDED")):
+        # Keep original evidence; a later completion after failure is a late-payment
+        # conflict, not permission to settle or unlock a knowledge asset.
+        return {**previous, "verification_state": "review_required", "observed_status": new}
+    return current
+
+
 async def refresh_order(order_id, user):
     key, secret = configuration()
     fingerprint = hashlib.sha256((key + ":" + secret).encode()).hexdigest()
@@ -179,7 +203,7 @@ async def refresh_order(order_id, user):
     try:
         async with conn.transaction():
             await conn.execute("SELECT pg_advisory_xact_lock(80002,7320)")
-            existing = await conn.fetchrow("SELECT user_id FROM transak_staging_orders WHERE order_id=$1", UUID(order_id))
+            existing = await conn.fetchrow("SELECT user_id,receipt FROM transak_staging_orders WHERE order_id=$1", UUID(order_id))
             if existing and existing["user_id"] != user["id"]:
                 raise ValueError("Order belongs to a different account")
             row = await conn.fetchrow("SELECT * FROM transak_staging_tokens WHERE credential_hash=$1", fingerprint)
@@ -188,9 +212,12 @@ async def refresh_order(order_id, user):
                 data = await provider_json(client, "https://api-stg.transak.com/partners/api/v2/order/" + order_id,
                     method="GET", headers={"access-token": token, "x-api-key": key})
             receipt = verified_order(data, order_id, user["wallet_address"])
+            receipt = reconcile_receipt(json.loads(existing["receipt"]) if existing else None, receipt)
             await conn.execute("""INSERT INTO transak_staging_orders(order_id,user_id,wallet_address,receipt)
                 VALUES ($1,$2,$3,$4) ON CONFLICT (order_id) DO UPDATE SET receipt=$4,checked_at=NOW()
                 """, UUID(order_id), user["id"], user["wallet_address"], json.dumps(receipt))
+            await conn.execute("""UPDATE transak_staging_orders SET refresh_error=NULL,
+                next_check_at=NOW()+INTERVAL '5 minutes' WHERE order_id=$1""", UUID(order_id))
             return receipt
     finally:
         await conn.close()
@@ -209,11 +236,49 @@ async def check_order(body: OrderLookup, request: Request, user=Depends(wallet_u
 async def orders(user=Depends(current_user)):
     conn = await get_conn()
     try:
-        rows = await conn.fetch("""SELECT receipt,checked_at FROM transak_staging_orders
+        rows = await conn.fetch("""SELECT receipt,checked_at,refresh_error FROM transak_staging_orders
             WHERE user_id=$1 ORDER BY checked_at DESC LIMIT 50""", user["id"])
-        return {"orders": [{**json.loads(row["receipt"]), "checked_at": row["checked_at"].isoformat()} for row in rows]}
+        return {"orders": [{**json.loads(row["receipt"]), "checked_at": row["checked_at"].isoformat(),
+                            "refresh_error": row["refresh_error"]} for row in rows]}
     finally:
         await conn.close()
+
+
+async def reconcile_saved_orders():
+    """Read-only provider polling. Claim batches durably across backend workers."""
+    configuration()
+    conn = await get_conn()
+    try:
+        async with conn.transaction():
+            rows = await conn.fetch("""SELECT o.order_id,o.user_id,o.wallet_address,o.checked_at
+                FROM transak_staging_orders o JOIN app_users u ON u.id=o.user_id
+                WHERE o.next_check_at<=NOW() AND lower(u.wallet_address)=lower(o.wallet_address)
+                AND COALESCE(o.receipt->>'verification_state','')<>'review_required'
+                AND o.receipt->>'status'<>'REFUNDED'
+                ORDER BY o.next_check_at LIMIT 5 FOR UPDATE OF o SKIP LOCKED""")
+            for row in rows:
+                await conn.execute("UPDATE transak_staging_orders SET next_check_at=NOW()+INTERVAL '5 minutes' WHERE order_id=$1", row["order_id"])
+    finally:
+        await conn.close()
+    for row in rows:
+        try:
+            await refresh_order(str(row["order_id"]), {"id":row["user_id"], "wallet_address":row["wallet_address"]})
+        except Exception:
+            conn = await get_conn()
+            try:
+                await conn.execute("UPDATE transak_staging_orders SET refresh_error=$2 WHERE order_id=$1 AND checked_at=$3",
+                    row["order_id"], "Automatic provider refresh failed; saved evidence is unchanged. Retry later.", row["checked_at"])
+            finally:
+                await conn.close()
+
+
+async def reconciliation_worker():
+    while True:
+        try:
+            await reconcile_saved_orders()
+        except Exception:
+            logging.getLogger(__name__).warning("Transak saved-order reconciliation unavailable; retrying later")
+        await asyncio.sleep(60)
 
 
 class PayoutPreference(BaseModel):

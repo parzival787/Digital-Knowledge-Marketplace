@@ -60,3 +60,10 @@ codex/dkm-payment-persistence. Preserve existing implementations and deployments
 
 Completion requires implementation plus the agreed automated and human acceptance
 checks. A milestone commit is not a claim that the entire project is complete.
+
+- BUY reconciliation: implemented and locally tested for durable worker claims,
+  provider outages, terminal regressions, late completion and changed completion
+  amounts. SELL verification and audited resolution remain open.
+- Required research: QAOA and trained VQC implemented, benchmarked and exposed on
+  authenticated /research. Controlled synthetic/authored results and limitations
+  are retained in research_results. Neither beats its main classical baseline.

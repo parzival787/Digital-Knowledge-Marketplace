@@ -24,6 +24,17 @@ buyer DKM fee. Acceptance rechecks terms, expiry, wallet and old/new entitlement
 before approval and again before purchase. Funding/FX/payout costs remain explicitly
 unquoted. This is not a reservation or an atomic on-chain expected-price guard.
 
+Saved Transak BUY orders now have durable polling claims and retry scheduling.
+Completed evidence is preserved on provider failure; contradictory terminal
+statuses/amounts require review. This is provider evidence, never entitlement.
+SELL verification and an audited review-resolution workflow remain open.
+
+Required QAOA/VQC experiments now have reproducible simulator implementations,
+measured reports in research_results and an authenticated /research page. QAOA
+ran 64 synthetic cases (17.60% mean optimality gap); VQC test NDCG@10 was 0.6093
+versus original MiniLM 0.9053 and PCA4 0.7027. Production search/prices unchanged.
+See RESEARCH_PLAN.md for assumptions, reproduction and limitations.
+
 The full capstone roadmap is still unfinished. Earlier handoff documents described
 an in-memory mock payment service; this checkout extends that implementation.
 

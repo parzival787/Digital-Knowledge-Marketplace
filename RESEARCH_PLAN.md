@@ -44,5 +44,33 @@ Primary method references consulted 2026-10-11:
 - Lloyd et al., *Quantum embeddings for machine learning*:
   https://arxiv.org/abs/2001.03622
 
-Status: required engineering; experiment implementation and measured results are
-still pending. These references guide the method, not evidence of DKM results.
+Status: implemented and locally tested with measured simulator results. The
+authenticated /research page presents the evidence; production search and seller
+prices are unchanged. This does not establish quantum advantage or independent
+academic acceptance.
+
+## Reproduce and inspect
+
+From backend, install the separate requirements-research.txt group if PennyLane
+is missing, then run with the project's virtual-environment Python:
+
+```powershell
+.\venv\Scripts\python.exe -m research.run_pricing
+.\venv\Scripts\python.exe -m research.run_embeddings
+.\venv\Scripts\python.exe -m unittest tests.test_qaoa tests.test_vqc tests.test_research_results
+```
+
+The embedding run uses the existing cached all-MiniLM-L6-v2 model and does not
+download it. Outputs, fitted arrays, seeds, assumptions and reports are retained
+in research_results. No private uploaded assets enter either experiment.
+
+- QAOA: 64 synthetic cases, 7 qubits, depth 2, 2,048 samples per case. Mean
+  sampled-price revenue gap from the exact optimum: 17.60%. Classical optimization
+  matched all 64 exact optimal prices; QAOA matched one. The reference-price
+  baseline is synthetic, not a rerun of the existing LLM price recommender.
+- VQC: 64 training documents, 96 retrieval documents and 32 held-out queries.
+  Test NDCG@10: original 0.9053, PCA4 baseline 0.7027, untrained circuit 0.6050,
+  trained VQC 0.6093. Query topics overlap training-document topics; labels are
+  authored rules. This is an in-domain controlled benchmark.
+- Neither experiment outperformed its principal classical baseline. These are
+  actual measured results, not a claim of a production optimization improvement.

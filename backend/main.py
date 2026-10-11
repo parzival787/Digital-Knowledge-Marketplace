@@ -35,6 +35,7 @@ from services.reviews import router as reviews_router
 from services.content_security import seal, unseal, master_key
 from services.payments.transak import router as transak_router, setup_transak
 from services.payments.quotes import router as quotes_router, setup_quotes
+from services.research_results import router as research_router
 
 
 
@@ -44,6 +45,7 @@ app.include_router(auth_router)
 app.include_router(reviews_router)
 app.include_router(transak_router)
 app.include_router(quotes_router)
+app.include_router(research_router)
 
 
 @app.exception_handler(DuplicateUploadError)
@@ -62,7 +64,7 @@ async def validation_error(request, exc):
 @app.middleware("http")
 async def private_response_headers(request, call_next):
     response = await call_next(request)
-    if request.url.path.startswith(("/api/auth", "/api/account", "/api/payments", "/api/purchase-quotes", "/api/assets")):
+    if request.url.path.startswith(("/api/auth", "/api/account", "/api/payments", "/api/purchase-quotes", "/api/research", "/api/assets")):
         response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -83,6 +85,14 @@ async def startup():
     await setup_auth()
     await setup_transak()
     await setup_quotes()
+    if os.getenv("TRANSAK_RECONCILIATION_ENABLED", "true") == "true":
+        from services.payments.transak import configuration, reconciliation_worker
+        try:
+            configuration()
+        except ValueError:
+            pass
+        else:
+            app.state.transak_task = asyncio.create_task(reconciliation_worker())
     if os.getenv("SETTLEMENT_ENABLED") == "true":
         from services.payments.settlement import settlement_worker
         app.state.settlement_task = asyncio.create_task(settlement_worker())
@@ -91,13 +101,14 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
-    task = getattr(app.state, "settlement_task", None)
-    if task:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+    for name in ("settlement_task", "transak_task"):
+        task = getattr(app.state, name, None)
+        if task:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
 
 @app.get("/")

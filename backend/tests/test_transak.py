@@ -144,3 +144,47 @@ class TransakTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await transak.create_session("0x" + "1" * 40, "127.0.0.1", payout_currency="INVALID")
         self.assertEqual(self.sessions, 1)
+
+    async def test_terminal_regression_and_late_capture_require_review(self):
+        user = {"id":1,"wallet_address":"0x" + "1" * 40}
+        for first, second in (("COMPLETED","PROCESSING"),("REFUNDED","COMPLETED"),("FAILED","COMPLETED")):
+            self.order_id = str(uuid.uuid4()); self.order["_id"] = self.order_id
+            self.order["status"] = first
+            await transak.refresh_order(self.order_id,user)
+            self.order["status"] = second
+            result = await transak.refresh_order(self.order_id,user)
+            self.assertEqual(result["status"],first)
+            self.assertEqual(result["observed_status"],second)
+            self.assertEqual(result["verification_state"],"review_required")
+            self.assertFalse(result["grants_access"])
+            self.order["status"] = first
+            result = await transak.refresh_order(self.order_id,user)
+            self.assertEqual(result["verification_state"],"review_required")
+
+    async def test_completed_amount_changes_do_not_replace_evidence(self):
+        user = {"id":1,"wallet_address":"0x" + "1" * 40}
+        self.order["status"] = "COMPLETED"; self.order["amountPaid"] = 100
+        await transak.refresh_order(self.order_id,user)
+        self.order["amountPaid"] = 99
+        result = await transak.refresh_order(self.order_id,user)
+        self.assertEqual(result["amount_paid"],"100")
+        self.assertEqual(result["verification_state"],"review_required")
+
+    async def test_background_reconciliation_claims_once_and_preserves_outages(self):
+        user = {"id":1,"wallet_address":"0x" + "1" * 40}
+        await transak.refresh_order(self.order_id,user)
+        conn = await self.isolated()
+        await conn.execute("ALTER TABLE app_users ADD COLUMN wallet_address TEXT")
+        await conn.execute("UPDATE app_users SET wallet_address=$1 WHERE id=1",user["wallet_address"])
+        await conn.execute("UPDATE transak_staging_orders SET next_check_at=NOW()-INTERVAL '1 minute'")
+        await conn.close()
+        from unittest.mock import AsyncMock
+        with patch.object(transak,"refresh_order",AsyncMock(side_effect=RuntimeError("secret"))) as refresh:
+            await asyncio.gather(transak.reconcile_saved_orders(),transak.reconcile_saved_orders())
+            self.assertEqual(refresh.await_count,1)
+        saved = (await transak.orders(user))["orders"][0]
+        self.assertEqual(saved["status"],"AWAITING_PAYMENT_FROM_USER")
+        self.assertIn("failed",saved["refresh_error"])
+        self.assertNotIn("secret",saved["refresh_error"])
+        await transak.refresh_order(self.order_id,user)
+        self.assertIsNone((await transak.orders(user))["orders"][0]["refresh_error"])

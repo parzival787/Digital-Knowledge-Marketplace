@@ -6,6 +6,7 @@ type Receipt = {
   order_id: string; status: string; fiat_currency: string; fiat_amount: string | null;
   amount_paid: string | null; provider_fee: string | null; crypto_amount: string | null;
   transaction_hash: string | null; checked_at?: string;
+  verification_state?: string; observed_status?: string; refresh_error?: string | null;
 };
 export default function TransakOrders() {
   const [orders, setOrders] = useState<Receipt[]>([]);
@@ -28,6 +29,7 @@ export default function TransakOrders() {
   return <section className="space-y-3 rounded-xl border p-5" aria-labelledby="transak-orders-title">
     <h2 id="transak-orders-title" className="text-xl font-semibold">Your Transak sandbox orders</h2>
     <p>After checkout, copy its order ID here. We verify it with Transak and save its status for your account. This does not purchase a knowledge asset.</p>
+    <p className="text-sm">Saved orders are rechecked periodically while the backend is running. Refresh this view to see the latest saved evidence.</p>
     <form onSubmit={event => { event.preventDefault(); void refresh(id); }} className="space-y-2">
       <label htmlFor="transak-order-id" className="block">Transak order ID</label>
       <input id="transak-order-id" value={id} onChange={event => setId(event.target.value)} required maxLength={36}
@@ -40,6 +42,8 @@ export default function TransakOrders() {
     {orders.map(order => <article key={order.order_id} className="space-y-2 border-t pt-3">
       <p className="break-all">Order: {order.order_id}</p>
       <p>Provider status: {order.status}</p>
+      {order.verification_state === "review_required" && <p role="alert" className="text-amber-800">Provider evidence conflicts with a previous result. Review required; last observed status: {order.observed_status}. Do not treat this as a completed marketplace payment.</p>}
+      {order.refresh_error && <p role="status">{order.refresh_error}</p>}
       <p>Quoted amount: {order.fiat_amount ?? "Unavailable"} {order.fiat_currency}</p>
       <p>Amount paid: {order.amount_paid ?? "Unavailable"} {order.fiat_currency}</p>
       <p>Provider fees reported: {order.provider_fee ?? "Unavailable"} {order.fiat_currency} — do not add these again to the provider total.</p>
