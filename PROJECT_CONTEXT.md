@@ -5,8 +5,9 @@
 The PDF baseline and active draft PR #1 at 6612caf were verified against GitHub
 and local git. Continue codex/dkm-payment-persistence; preserve unrelated changes.
 ENGINEERING_PLAN.md now orders the latest 19-phase local-demo brief;
-HUMAN_ACTION_REQUIRED.md isolates real human dependencies. Embedded wallets and
-research are conditional, not mandatory blockers without the rubric.
+HUMAN_ACTION_REQUIRED.md isolates real human dependencies. The owner confirmed
+QAOA pricing and VQC embeddings are mandatory core requirements on 2026-10-11;
+older conditional research notes are superseded for these two components.
 
 The existing /api/capabilities now models fixed-price, auctions, Transak BUY/SELL,
 Razorpay test, unverified UPI, unsupported crypto routes and pending audit registry.

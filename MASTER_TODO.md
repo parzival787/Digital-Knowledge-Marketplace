@@ -2,7 +2,9 @@
 
 Latest execution update 2026-10-11: use HUMAN_ACTION_REQUIRED.md for the owner
 queue and ENGINEERING_PLAN.md for milestone order. Embedded wallets are conditional
-on the rubric under the latest brief. Baseline tests reran successfully; shared
+on the rubric under the latest brief. QAOA pricing and VQC embeddings are REQUIRED
+core components, explicitly confirmed by the owner; older conditional labels below
+are superseded. Baseline tests reran successfully; shared
 server route capabilities and frontend gating are implemented and tested. This
 does not complete quotes, recording, indexing or interactive acceptance.
 
@@ -48,10 +50,10 @@ backend recording, entitlement connection and deployment remain engineering work
 
 ### 4. Supply the college acceptance requirements
 
-Send the deadline and relevant rubric/report requirements. In particular, say
-whether QAOA pricing, VQC embeddings and rich quality scoring are mandatory.
-These research experiments cannot be labelled completed based on the existing
-LLM score or class names.
+QAOA pricing and VQC embeddings are confirmed mandatory (2026-10-11). Their
+implementation, baselines and measured results remain engineering work. Send the
+deadline if not already supplied. Existing LLM scores and class names do not
+complete the required experiments.
 
 ### 5. Enable remaining external account integrations
 
@@ -98,7 +100,7 @@ Still open; I must not describe these as owner-only tasks:
 - [ ] Automated provider reconciliation/refund workflow and sale-race handling.
 - [ ] Complete indexed auction/history/net earnings and acceptance verification.
 - [ ] Final feature-by-feature local acceptance run and report/demo evidence.
-- [ ] Conditional research work if required by the rubric.
+- [ ] Required QAOA pricing and VQC embedding experiments, comparisons and report.
 
 The new Transak history is provider-verified, not independently chain-verified.
 It is limited to the 50 most recently checked saved orders. Users enter the provider

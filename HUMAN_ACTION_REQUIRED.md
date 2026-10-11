@@ -3,13 +3,17 @@
 Updated 2026-10-11. Engineering continues independently. Do not paste secrets.
 No additional payment-provider signup or public hosting is required now.
 
-## College scope (needed before conditional work)
+## College scope (QAOA/VQC requirement resolved)
 
-ACTION REQUIRED: Confirm the rubric and deadline.
-WHY: Research and a no-MetaMask experience are conditional in the latest brief.
+QAOA pricing and VQC embeddings are mandatory core components, confirmed by the
+owner on 2026-10-11. No further approval or reconfirmation is needed to implement
+and evaluate them. Their engineering work belongs to Codex, not the owner.
+
+ACTION REQUIRED: Send the submission deadline if it has not already been supplied.
+WHY: Schedule the final human acceptance session; engineering continues meanwhile.
 WHERE TO DO IT: Reply in this chat with the college requirements.
-WHAT TO ENTER/CLICK: State whether embedded wallets, SELL payout, receipt-registry
-demo, QAOA/VQC, rich scoring, Lit or Kyber are mandatory.
+WHAT TO ENTER/CLICK: Provide the deadline and any additional rubric text not
+already present in the repository/handout. Do not reconfirm QAOA/VQC.
 WHAT NOT TO SHARE: Personal student records or private credentials.
 WHAT RESULT TO SEND BACK: Required feature list and deadline.
 

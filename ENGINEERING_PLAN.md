@@ -18,7 +18,11 @@ codex/dkm-payment-persistence. Preserve existing implementations and deployments
   inventory, failure handling and final acceptance automation.
 - Human/external dependencies: HUMAN_ACTION_REQUIRED.md. No deployment or funds
   spending is authorized by this execution plan.
-- Conditional: embedded wallet and research only if the rubric requires them.
+- REQUIRED (owner confirmed 2026-10-11): QAOA pricing and VQC embeddings, including
+  trained/optimized experiments, classical baselines, measured evaluation and
+  report evidence. Existing classical QUBO reranking does not complete these.
+- Other previously conditional additions stay separate; do not ask the owner to
+  reconfirm that QAOA/VQC are required.
 
 ## Ordered milestones
 
@@ -37,7 +41,10 @@ codex/dkm-payment-persistence. Preserve existing implementations and deployments
    prepare deployment/rollback proposal without executing it.
 7. Finish practical security/recovery checks, backup restore drill, registry audit
    and compiler assessment; preserve existing encryption keys and owner edits.
-8. Update current documentation and final human acceptance script; commit logical
+8. Complete required QAOA pricing and VQC embedding experiments from the handout,
+   with reproducible local simulator runs, classical comparisons and NDCG@10 for
+   retrieval. Report actual results and limitations without claiming advantage.
+9. Update current documentation and final human acceptance script; commit logical
    milestones to existing PR. Keep incomplete and blocked items explicit.
 
 ## Milestone progress

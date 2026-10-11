@@ -44,8 +44,8 @@ live payment E2E completion. Items overlap, so counts are not an effort percenta
 | 34 | Reviews/reputation | Implemented | Verified purchaser writes, self-review rejection, 1–5 rating, concurrent update, public aggregate/pagination/UI |
 | 35 | Seller dashboard | Partial | Uploads/mint recovery, quality, asset links and fixed-price activity; consolidated listings/reviews/net lifetime earnings incomplete |
 | 36 | Rich quality/review analysis | Conditional | Existing single LLM score only; coherence/completeness/originality benchmarks and review summaries absent |
-| 37 | QAOA pricing research | Conditional | No QAOA optimizer/benchmark results; not fabricated |
-| 38 | VQC embedding research | Conditional | Classical 384D embeddings exist; no VQC/NDCG benchmark; not fabricated |
+| 37 | QAOA pricing research | Required - incomplete | Owner confirmed mandatory 2026-10-11; optimizer, 50-100 asset benchmark, classical comparison and measured report remain |
+| 38 | VQC embedding research | Required - incomplete | Owner confirmed mandatory 2026-10-11; 384D compression/VQC/expansion, training, classical comparison and NDCG@10 remain |
 | 39 | Production security hardening | Partial | Auth/CSRF/CORS/signatures/idempotency/encryption in place; abuse/load review, secret rotation, restore drill and independent audit remain |
 | 40 | Smart-contract audit | Partial | Slither completed, actionable ordering warnings fixed; 4 low timestamp and 1 informational compiler finding remain; independent audit still required |
 | 41 | Production backend/DB | Pending | No Oracle host/domain/access, HTTPS, secrets, backup target or production sizing supplied |
