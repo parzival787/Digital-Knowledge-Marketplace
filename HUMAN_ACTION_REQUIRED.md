@@ -77,5 +77,21 @@ custody; verified sandbox registry. A receipt never grants access or transfers f
 WHAT TO SEND BACK TO YOU: Explicit approval of the finalized package or your choice
 to demonstrate local contract tests while leaving deployed recording blocked.
 
+## 6. Historical RPC access, before migration sign-off
+
+ACTION REQUIRED: Supply a working Amoy RPC with sufficient historical log access,
+if full historical coverage is required for the final demonstration/migration.
+WHY: The configured 10-block pages leave millions of blocks to index. The retired
+Polygon public endpoint cannot connect; the current public dRPC endpoint rejected
+the historical test request. Neither proves complete buyer discovery.
+WHERE: Your RPC provider dashboard and ignored backend/.env.
+WHAT I MUST CLICK/ENTER: Choose Amoy (80002) historical eth_getLogs support and save
+the endpoint locally. Do not purchase a plan without reviewing its limits/cost.
+Tell Codex when saved; Codex performs validation, backfill and inventory refresh.
+WHAT I MUST NOT SHARE: API keys or credential-bearing RPC URLs in chat.
+EXPECTED RESULT: Complete confirmed history and refreshed migration evidence,
+with reorg checks retained. Current purchases/access do not depend on this backfill.
+WHAT TO SEND BACK TO YOU: Provider/plan name, documented log limits and "saved locally".
+
 Production hosting, company onboarding, live fiat conversion, independent audit
 and production key-management procurement are outside the local demo acceptance.

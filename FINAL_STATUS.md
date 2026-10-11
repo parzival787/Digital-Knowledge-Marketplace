@@ -34,5 +34,10 @@ The current bounded backfill must not be called lifetime history. No new provide
 signup is requested, and no real fiat conversion or universal currency support is
 claimed. The project is not yet complete.
 
+Public RPC fallback was investigated: the old Polygon endpoint is retired; the
+documented dRPC replacement rejected the historical request (details in
+TEST_EVIDENCE.md). No RPC credentials were changed. Full-history completion still
+needs suitable RPC access; it is not a missing dashboard feature.
+
 QAOA/VQC are required and implemented; their honest underperformance against the
 classical baselines remains documented. Production search is unchanged.

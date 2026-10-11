@@ -2,6 +2,16 @@
 
 ## Autonomous remaining-work continuation (after b49d5f6)
 
+- RPC follow-up: Polygon's formerly documented rpc-amoy.polygon.technology endpoint
+  failed DNS resolution. Polygon's July 2026 announcement confirms its retirement.
+  The replacement documented polygon-amoy.drpc.org responded, but a 2,000-block
+  eth_getLogs request for 45927547–45929546 returned HTTP 400 / code 35, message
+  "ranges over 10000 blocks are not supported on free plan". That inconsistent
+  limit response was not treated as an empty result or successful backfill.
+  Existing credentials/configuration were not changed. Sources:
+  [current RPC documentation](https://docs.polygon.technology/pos/reference/rpc-endpoints)
+  and [retirement announcement](https://forum.polygon.technology/t/deprecation-of-polygons-public-rpc-endpoints-mainnet-amoy/22014).
+
 - Latest consolidated run: **68 backend tests**, **12 frontend regressions**,
   production frontend build, **128 contract tests**, and contract typecheck all
   passed. acceptance_results.json records all five zero exit codes.
