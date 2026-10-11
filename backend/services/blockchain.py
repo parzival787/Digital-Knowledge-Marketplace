@@ -1,6 +1,7 @@
 import os
 
 from web3 import Web3
+from web3.middleware import ExtraDataToPOAMiddleware
 from dotenv import load_dotenv
 
 from .knowledge_asset_abi import KNOWLEDGE_ASSET_ABI
@@ -21,6 +22,7 @@ if not RPC_URL:
 w3 = Web3(
     Web3.HTTPProvider(RPC_URL)
 )
+w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
 
 
 def check_blockchain_connection():

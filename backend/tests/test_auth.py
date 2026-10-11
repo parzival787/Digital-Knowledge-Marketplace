@@ -15,6 +15,21 @@ import main
 
 
 class AuthTests(unittest.IsolatedAsyncioTestCase):
+    async def test_concurrent_auth_abuse_limit_is_atomic(self):
+        import asyncio
+        from fastapi import HTTPException
+        from types import SimpleNamespace
+        request = SimpleNamespace(client=SimpleNamespace(host='192.0.2.1'))
+        async def attempt():
+            try:
+                await auth.throttle(request, 'concurrent-abuse-test')
+                return 200
+            except HTTPException as exc:
+                return exc.status_code
+        results = await asyncio.gather(*[attempt() for _ in range(30)])
+        self.assertEqual(results.count(200),10)
+        self.assertEqual(results.count(429),20)
+
     async def asyncSetUp(self):
         config = patch.dict("os.environ", {"CONTENT_MASTER_KEY": "dGVzdC1vbmx5LWtleS0zMi1ieXRlcy1sb25nLTAwMDA="})
         config.start()
@@ -273,7 +288,15 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
         original_client = httpx.AsyncClient
         with patch.object(main,"get_knowledge_asset",return_value=asset), patch.object(main,"has_purchased",return_value=False) as purchased, patch.object(main,"get_purchase_count",return_value=1):
             self.assertEqual((await self.client.get("/api/assets/1/download")).status_code,403)
-            purchased.return_value = True
+            # Exercise the real current+legacy lookup through the download API.
+            from services import blockchain
+            from unittest.mock import Mock
+            current,old=Mock(),Mock()
+            current.functions.hasPurchased.return_value.call.return_value=False
+            old.functions.hasPurchased.return_value.call.return_value=True
+            markets=patch.object(blockchain,'entitlement_markets',return_value=[current,old])
+            markets.start();self.addCleanup(markets.stop)
+            purchased.side_effect=blockchain.has_purchased
             access = (await self.client.get("/api/assets/1/access")).json()
             self.assertIsNone(access["file_url"])
             self.assertEqual(access["download_path"],"/api/assets/1/download")
@@ -298,9 +321,16 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
         await self.signup()
         await self.verify()
         asset = {"creator": Account.create().address}
+        legacy_lookup=reviews.blockchain.has_purchased
         with patch.object(reviews.blockchain, "get_knowledge_asset", return_value=asset), patch.object(reviews.blockchain, "has_purchased", return_value=False) as bought:
             self.assertEqual((await self.client.post("/api/assets/1/reviews", json={"rating": 5})).status_code, 403)
-            bought.return_value = True
+            from unittest.mock import Mock
+            current,old=Mock(),Mock()
+            current.functions.hasPurchased.return_value.call.return_value=False
+            old.functions.hasPurchased.return_value.call.return_value=True
+            markets=patch.object(reviews.blockchain,'entitlement_markets',return_value=[current,old])
+            markets.start();self.addCleanup(markets.stop)
+            bought.side_effect=legacy_lookup
             self.assertEqual((await self.client.post("/api/assets/1/reviews", json={"rating": 6})).status_code, 422)
             self.assertEqual((await self.client.post("/api/assets/1/reviews", json={"rating": True})).status_code, 422)
             results = await asyncio.gather(*[self.client.post("/api/assets/1/reviews", json={"rating": 4, "review_text": "Useful guide"}) for _ in range(2)])
@@ -311,6 +341,11 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(data["average"], 3)
             self.assertEqual(data["reviews"][0]["review_text"], "Updated")
             self.assertNotIn("buyer_address", str(data))
+            history = await self.client.get("/api/account/reviews")
+            self.assertEqual(history.status_code, 200)
+            self.assertEqual(len(history.json()["reviews"]), 1)
+            self.assertEqual(history.json()["reviews"][0]["direction"], "given")
+            self.assertNotIn("buyer_address", history.text)
             asset["creator"] = self.wallet.address
             self.assertEqual((await self.client.post("/api/assets/1/reviews", json={"rating": 5})).status_code, 403)
 
@@ -401,13 +436,14 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(response.json()["grants_access"])
 
     async def test_seller_preference_is_scoped_and_not_payout_authorization(self):
-        from services.payments import transak
+        from services.payments import transak, payouts
         from unittest.mock import AsyncMock
         path = "/api/payments/transak/payout-preference"
         self.assertEqual((await self.client.get(path)).status_code, 401)
         alice = await self.signup()
-        with patch.object(transak, "get_conn", self.isolated):
+        with patch.object(transak, "get_conn", self.isolated), patch.object(payouts, "get_conn", self.isolated):
             await transak.setup_transak()
+            await payouts.setup_payouts()
             self.assertEqual((await self.client.get(path)).json()["currency"], "USDC")
             self.assertEqual((await self.client.put(path, json={"currency": "EUR"}, headers={"origin": "https://attacker.invalid"})).status_code, 403)
             for body in ({"currency": "XYZ"}, {"currency": "EUR", "user_id": 2}):
@@ -421,9 +457,14 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
                 response = await self.client.post("/api/payments/transak/payout-session", json={"currency": "USD"})
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(create.call_args.kwargs["payout_currency"], "EUR")
+                self.assertIsNotNone(create.call_args.kwargs["partner_order"])
+                history = (await self.client.get("/api/payments/transak/payouts")).json()
+                self.assertEqual(len(history["payouts"]), 1)
+                self.assertEqual(history["payouts"][0]["state"], "pending_verification")
                 self.assertFalse(response.json()["automatic_payout_enabled"])
             await self.client.post("/api/auth/logout")
             await self.signup("bob")
+            self.assertEqual((await self.client.get("/api/payments/transak/payouts")).json()["payouts"], [])
             self.assertEqual((await self.client.get(path)).json()["currency"], "USDC")
             conn = await self.isolated()
             self.assertEqual(await conn.fetchval("SELECT payout_currency FROM app_users WHERE id=$1", alice["id"]), "EUR")

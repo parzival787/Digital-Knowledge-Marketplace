@@ -84,7 +84,7 @@ async def access_token(conn, client, key, secret, fingerprint, row):
     return token
 
 
-async def create_session(wallet, user_ip, payout_currency=None):
+async def create_session(wallet, user_ip, payout_currency=None, partner_order=None, partner_customer=None):
     if payout_currency is not None and payout_currency not in ("USD", "EUR", "INR", "IDR"):
         raise ValueError("Unsupported payout currency preference")
     key, secret = configuration()
@@ -93,6 +93,8 @@ async def create_session(wallet, user_ip, payout_currency=None):
               "redirectURL": ORIGIN + ("/account" if payout_currency else "/funding")}
     if payout_currency:
         params.update(productsAvailed="SELL", fiatCurrency=payout_currency)
+        if partner_order and partner_customer:
+            params.update(partnerOrderId=str(partner_order), partnerCustomerId=str(partner_customer))
     else:
         params.update(productsAvailed="BUY", cryptoCurrencyCode="USDC", network="polygon",
                       walletAddress=wallet, disableWalletAddressForm=True)
@@ -150,6 +152,10 @@ def verified_order(data, order_id, wallet):
             or data.get("network") != "polygon"
             or data.get("cryptoCurrency") != "USDC"):
         raise ValueError("Order does not match your verified wallet and the sandbox funding route")
+    return normalized_order(data, order_id)
+
+
+def normalized_order(data, order_id):
     status = data.get("status")
     currency = data.get("fiatCurrency")
     if not isinstance(status, str) or not re.fullmatch(r"[A-Z_]{1,64}", status):
@@ -276,6 +282,8 @@ async def reconciliation_worker():
     while True:
         try:
             await reconcile_saved_orders()
+            from services.payments.payouts import reconcile_payouts
+            await reconcile_payouts()
         except Exception:
             logging.getLogger(__name__).warning("Transak saved-order reconciliation unavailable; retrying later")
         await asyncio.sleep(60)
@@ -314,8 +322,8 @@ async def payout_session(request: Request, user=Depends(wallet_user)):
     if preference["currency"] == "USDC":
         raise HTTPException(409, "Choose a fiat withdrawal preference first. USDC wallet payments do not require an off-ramp.")
     try:
-        url = await create_session(user["wallet_address"], request.client.host if request.client else "",
-                                   payout_currency=preference["currency"])
+        from services.payments.payouts import create_payout
+        url = await create_payout(user, request.client.host if request.client else "", preference["currency"])
     except Exception:
         raise HTTPException(503, "Transak sandbox withdrawal is unavailable. SELL must be enabled by the provider and the selected currency must be supported.") from None
     return {"widget_url": url, "environment": "staging", "grants_access": False,

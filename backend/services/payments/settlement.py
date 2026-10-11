@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 
 from web3 import Web3
+from web3.middleware import ExtraDataToPOAMiddleware
 from web3.exceptions import TransactionNotFound, TimeExhausted
 
 from services.pgvector_client import get_conn
@@ -38,6 +39,7 @@ def connection():
     if os.getenv("SETTLEMENT_ENABLED") != "true" or not key:
         raise ValueError("Test checkout is unavailable until the settlement wallet and contract are configured")
     w3 = Web3(Web3.HTTPProvider(os.environ["BLOCKCHAIN_RPC_URL"], request_kwargs={"timeout": 15}))
+    w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
     if w3.eth.chain_id != 80002:
         raise ValueError("Settlement is restricted to Polygon Amoy testnet")
     account = w3.eth.account.from_key(key)

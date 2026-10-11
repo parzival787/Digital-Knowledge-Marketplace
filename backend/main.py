@@ -36,6 +36,10 @@ from services.content_security import seal, unseal, master_key
 from services.payments.transak import router as transak_router, setup_transak
 from services.payments.quotes import router as quotes_router, setup_quotes
 from services.research_results import router as research_router
+from services.payments.payouts import setup_payouts
+from services.payments.recording import router as recording_router, setup_recording, recording_worker
+from services.event_indexer import router as index_router, setup_indexer, index_worker
+from services.positions import router as positions_router
 
 
 
@@ -46,6 +50,9 @@ app.include_router(reviews_router)
 app.include_router(transak_router)
 app.include_router(quotes_router)
 app.include_router(research_router)
+app.include_router(recording_router)
+app.include_router(index_router)
+app.include_router(positions_router)
 
 
 @app.exception_handler(DuplicateUploadError)
@@ -84,6 +91,13 @@ async def startup():
     await setup_tables()
     await setup_auth()
     await setup_transak()
+    await setup_payouts()
+    await setup_recording()
+    await setup_indexer()
+    if os.getenv("EVENT_INDEXER_ENABLED", "true") == "true":
+        app.state.index_task = asyncio.create_task(index_worker())
+    if os.getenv("RECEIPT_RECORDING_ENABLED") == "true":
+        app.state.recording_task = asyncio.create_task(recording_worker())
     await setup_quotes()
     if os.getenv("TRANSAK_RECONCILIATION_ENABLED", "true") == "true":
         from services.payments.transak import configuration, reconciliation_worker
@@ -101,7 +115,7 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
-    for name in ("settlement_task", "transak_task"):
+    for name in ("settlement_task", "transak_task", "recording_task", "index_task"):
         task = getattr(app.state, name, None)
         if task:
             task.cancel()
@@ -555,6 +569,23 @@ async def capabilities(response: Response):
     return await asyncio.to_thread(payment_capabilities)
 
 
+@app.get("/api/account/reviews")
+async def account_reviews(user=Depends(current_user)):
+    conn = await get_conn()
+    try:
+        rows = await conn.fetch("""WITH latest AS (
+            SELECT DISTINCT ON (token_id,lower(buyer_address)) * FROM reviews
+            WHERE rating BETWEEN 1 AND 5 ORDER BY token_id,lower(buyer_address),created_at DESC,id DESC)
+            SELECT r.id,r.token_id,r.rating,r.review_text,r.created_at,
+                CASE WHEN lower(r.buyer_address)=$2 THEN 'given' ELSE 'received' END AS direction
+            FROM latest r WHERE lower(r.buyer_address)=$2 OR EXISTS (
+                SELECT 1 FROM knowledge_assets a WHERE a.token_id=r.token_id AND a.user_id=$1)
+            ORDER BY r.created_at DESC,r.id DESC LIMIT 100""", user['id'], (user['wallet_address'] or '').lower())
+        return {'reviews': [dict(row) for row in rows]}
+    finally:
+        await conn.close()
+
+
 @app.get("/api/assets/{token_id}/payment")
 async def latest_payment(token_id: int, user=Depends(current_user)):
     conn = await get_conn()
@@ -635,7 +666,7 @@ async def razorpay_webhook(request: Request):
             "razorpay_signature": signature,
         })
     except ValueError as e:
-        raise HTTPException(400, str(e)) from e
+        raise HTTPException(400, "Provider confirmation could not be verified; no success is claimed") from None
     return {"received": True, "status": order.status}
 
 @app.post("/api/payments/{order_id}/settle")
@@ -646,7 +677,7 @@ async def settle_payment(order_id: str, user=Depends(wallet_user)):
         order = await settle_order(order_id)
         return {"success": True, "order": order.model_dump()}
     except ValueError as e:
-        raise HTTPException(400, str(e)) from e
+        raise HTTPException(400, "Settlement could not be verified. Check the saved order status before retrying") from None
 
 @app.post("/api/payments/create")
 async def create_payment(
@@ -667,7 +698,7 @@ async def create_payment(
     except ValueError as e:
         raise HTTPException(
             status_code=400,
-            detail=str(e)
+            detail="Could not create this payment. Check asset availability and the configured payment route"
         )
 
 
@@ -711,5 +742,5 @@ async def confirm_payment(
     except ValueError as e:
         raise HTTPException(
             status_code=400,
-            detail=str(e)
+            detail="Payment confirmation could not be verified. Check the saved order before retrying"
         )

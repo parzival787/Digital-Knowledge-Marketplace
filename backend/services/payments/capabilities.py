@@ -76,7 +76,7 @@ def payment_capabilities():
             "Test checkout requires provider credentials, a test rate and a deployed funded-settlement interface.", "purchase"),
         "upi": route(False, "unverified", "Actual UPI funding and payout are not verified for this demo. Razorpay test simulations are separate.", "funding"),
         "crypto_route": route(False, "unsupported", "No executable swap/bridge route supports this Amoy MockUSDC deployment.", "funding"),
-        "receipt_registry": route(False, "configuration_required", "Audit registry source is locally tested; recording integration and deployment are pending. Never an access authority.", "audit"),
+        "receipt_registry": route(False, "configuration_required", "Durable audit recorder is implemented; registry deployment and recorder activation require review. Never an access authority.", "audit"),
     }
     return {"version": 1, "environment": "local_demo", "chain_id": 80002,
             "markets": markets, "routes": routes,
