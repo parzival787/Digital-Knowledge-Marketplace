@@ -1,5 +1,53 @@
 # Verification evidence
 
+## Autonomous remaining-work continuation (after b49d5f6)
+
+- Latest consolidated run: **68 backend tests**, **12 frontend regressions**,
+  production frontend build, **128 contract tests**, and contract typecheck all
+  passed. acceptance_results.json records all five zero exit codes.
+- Direct current/legacy positions test passed: wallet scope, block-pinned license,
+  listing/auction/refund reads, pagination and wrong-registry rejection.
+- Legacy download and review tests now exercise current-false/old-true entitlement
+  lookups through the actual APIs; frontend legacy cancellation, bid, finalization,
+  refund and duplicate-purchase regression tests also passed.
+- Original payment canonical/reorg checks and no-signing-on-source-removal passed;
+  both buyer and verified seller can see sanitized audit status.
+- Browser: welcome and signup show authentication controls only. Google correctly
+  reports configuration pending. A disposable local account signed in successfully;
+  all dashboard sections rendered, direct Amoy positions resolved, and payout/
+  recording/backfill limitations were visible. Six account/history APIs returned
+  200. Logout restored welcome-only navigation. The test account/sessions were
+  removed; no public transaction or provider checkout occurred.
+- Follow-up index/source suite: **6 passed**, including the two newer tests for
+  actual auction/refund ABI decoding and fair source polling. The initial command
+  was blocked by approval-review quota; the later approved run completed normally.
+
+- SELL: three new database tests passed for binding, duplicates, amount/currency
+  conflicts, terminal regression, late completion, audited resolution and restart/
+  outage recovery. Nine existing BUY/provider tests also passed.
+- Recorder: durable persistence/restart/nonce-serialization tests passed. Actual
+  signed transaction decoding and emitted-event fixtures passed after correcting
+  a missing-transaction fixture constructor. No chain broadcast performed.
+- Indexer: two tests passed for concurrency/idempotency, exact integer totals,
+  deployment discovery, checkpoint reorg fail-closed handling and derived rebuild.
+- Source adapters: two tests passed for reverified chain evidence, duplicate/reorg
+  rejection and provider amount/currency/status binding.
+- First combined backend run: 63 tests, one payout fixture failure. The fixture
+  now initializes seller_payouts in its isolated schema; the targeted test passed
+  and includes API history isolation. The later 68-test run above passed; the
+  initial fixture failure is retained here as historical evidence.
+- Slither after compiler adoption: 29 contracts / 102 detectors, zero high/medium,
+  four low timestamp findings and one informational pragma-range finding. Registry
+  included. Source compilation succeeded; no independent audit claim.
+- Solidity 0.8.30 and 0.8.37 each passed 128 local tests; default local build now
+  uses 0.8.37/Shanghai. Contract TypeScript checking passed.
+- Live read-only: Amoy index pages persisted; snapshot at block 49870192 found
+  five listings and zero auctions, matching frontend/backend legacy configuration.
+- Restore: streamed local PostgreSQL dump into a disposable database; counts and
+  content digests matched for all 12 public tables. Disposable copy removed.
+- Provider completion, registry deployment/recording and interactive E2E remain
+  unverified. Backfill does not yet prove lifetime totals or all historical buyers.
+
 ## Research and BUY reconciliation milestone (2026-10-11)
 
 - LOCALLY TESTED: 9 Transak database/provider-boundary tests passed, including

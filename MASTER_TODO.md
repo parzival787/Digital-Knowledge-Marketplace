@@ -1,138 +1,67 @@
-# DKM: current owner and engineering checklist
+# DKM master checklist — 2026-10-11
 
-Latest execution update 2026-10-11: use HUMAN_ACTION_REQUIRED.md for the owner
-queue and ENGINEERING_PLAN.md for milestone order. Embedded wallets are conditional
-on the rubric under the latest brief. QAOA pricing and VQC embeddings are REQUIRED
-core components, explicitly confirmed by the owner; older conditional labels below
-are superseded. Baseline tests reran successfully; shared
-server route capabilities and frontend gating are implemented and tested. This
-does not complete quotes, recording, indexing or interactive acceptance.
+This replaces the previous owner checklist. FINAL_STATUS.md distinguishes evidence
+levels; TEST_EVIDENCE.md records actual checks, including checks not yet run.
 
-Updated 2026-10-10. This replaces earlier requests to acquire several providers
-or prepare production hosting. Current scope: a local college-project demo.
-Older roadmap documents retain historical findings, not the current owner queue.
+## Implemented
 
-## What you need to do now, in order
+- [x] Welcome -> signup/login -> authenticated workspace; wallet proof and isolation.
+- [x] Encrypted upload, persistent duplicate guard, mint/link recovery, search,
+  purchaser reviews and protected downloads.
+- [x] Marketplace/auction contract flows and current/legacy client handling.
+- [x] Durable Web2 test orders, settlement checkpoints, review/refund recovery.
+- [x] Shared route capabilities and expiring fixed-price quote validation.
+- [x] Transak sandbox BUY/SELL sessions, account binding, saved histories and
+  server verification; independent payout states and audited SELL conflict resolution.
+- [x] Audit registry source plus durable backend evidence/recording/reversal jobs,
+  nonce protection and canonical transaction/event checks; disabled until deployment.
+- [x] Persistent current/legacy event indexing, exact payout-event accounting,
+  reorg holds, reconciliation and direct paginated current account positions.
+- [x] Buyer/seller dashboard sections for uploads, positions, provider history,
+  payment/receipt status, reviews, payout preference and verified payout history.
+- [x] Mandatory QAOA/VQC implementation, measured comparisons and research page.
+  Results underperform the main classical baselines; retain that conclusion.
+- [x] Migration inventory/rollback plan; Slither/compiler review and local upgrade;
+  concurrency/abuse/restart checks and PostgreSQL restore drill.
+- [x] Consolidated acceptance runner, exact demo runbook and human-only action list.
 
-### 1. Contract tooling — resolved, no owner action
+## Still Codex-owned
 
-The hardhat skill was found in contracts/.agents/skills/hardhat/SKILL.md.
-The matching ethers/Mocha skill is bundled with the installed Hardhat package.
-The previous missing-skill request was an incomplete search and is withdrawn.
+- [x] Execute the newest auction/refund decoding and source-polling fairness tests.
+  Follow-up suite: six passed after the temporary approval-review quota cleared.
+  Latest consolidated run: 68 backend tests and all four other acceptance checks.
+- [x] Inspect the signed-in rendered dashboard and six APIs; welcome/signup/logout
+  also inspected. Disposable local account removed after checking empty states.
+- [x] Review/stage only task implementation changes and commit milestone b871557.
+  Preserve unrelated llm_enrichment.py, trailing-space contracts directory, output
+  and tmp. Documentation/evidence follow separately on the same draft PR branch.
+- [ ] Finish historical backfill and refresh migration sign-off when RPC capacity
+  permits. Current data is a confirmed indexed range, not lifetime accounting.
+- [ ] Verify final provider/deployment integration after the external gates below;
+  fix defects found by human acceptance rather than treating the runbook as a pass.
 
-The provider-independent receipt registry is implemented and locally tested, but
-backend recording, entitlement connection and deployment remain engineering work.
+## Human/external gates
 
-### 2. Prepare two test participants
+Use HUMAN_ACTION_REQUIRED.md for exact actions; no code/DB tasks are delegated.
 
-- Confirm MetaMask is on Polygon Amoy, chain ID 80002 (not a different MOI network).
-- Use distinct seller and buyer wallet addresses and separate DKM accounts.
-- Verify each wallet through the Account page in its own browser profile.
-- Share only the two PUBLIC addresses and which is seller/buyer.
-- Use Amoy test POL and DKM MockUSDC only. Do not buy real crypto for this demo.
-- Keep MetaMask available for your wallet verification and transaction signatures.
+- [ ] Separate seller/buyer/bidder wallets and signed test transactions.
+- [ ] Completed supported Transak sandbox BUY/SELL; actual provider routes/fees.
+- [ ] Google OAuth configuration and login if needed in the presentation.
+- [ ] Existing content-key backup and replacement of exposed RPC credentials.
+- [ ] Separately approved receipt-registry/funded-market deployment and signer roles.
+- [ ] A supported real conversion/swap route if the rubric requires actual arbitrary
+  crypto/fiat rather than sandbox demonstrations. Current Amoy MockUSDC has no
+  executable universal swap route; no signup or alternative provider guarantees it.
 
-### 3. Complete one Transak sandbox checkout
+## Explicit remaining limitations
 
-- Your saved credentials already authenticate and create a staging session.
-  No Onramp.money, MoonPay or Alchemy Pay registration is required.
-- In Transak's dashboard, leave the additional partner fee at zero.
-- In DKM, log in, verify your wallet, then open Add USDC > Open Transak sandbox.
-- Use only the official sandbox instructions:
-  https://docs.transak.com/guides/sandbox-credentials
-- Copy the test order ID after checkout, return to Add USDC, and use Verify
-  sandbox order. This verifies status server-side and saves it to your account.
-- Return the test order ID, selected payment method and any non-secret error.
-  Do not provide identity documents, card details, OTPs or credentials in chat.
-- UPI availability is not verified. If UPI is absent, report that; do not use a
-  real UPI payment. Staging delivers TRNSK rather than DKM MockUSDC.
-- Session creation alone is not proof that the whole checkout works.
+Transak sandbox TRNSK is not Amoy MockUSDC. Razorpay test uses a prefunded treasury,
+not INR-to-USDC conversion. SELL preference is not automatic per-sale payout.
+All-in provider FX/route costs cannot be promised without an executable provider
+quote. The seller pays the existing DKM fee from gross proceeds; it is not added
+again to the buyer. Automatic chargeback ingestion/partial reversal processing is
+not implemented; terminal linkage exists but unverified assertions are rejected.
 
-### 4. Supply the college acceptance requirements
-
-QAOA pricing and VQC embeddings are confirmed mandatory (2026-10-11). Their
-implementation, baselines and measured results remain engineering work. Send the
-deadline if not already supplied. Existing LLM scores and class names do not
-complete the required experiments.
-
-### 5. Enable remaining external account integrations
-
-For Google sign-in:
-- Create a Google OAuth Web Application client.
-- Register http://localhost:8000/api/auth/google/callback as its redirect URI.
-- Save GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI in ignored
-  backend/.env. Keep FRONTEND_ORIGIN=http://localhost:3000.
-- Tell me only that configuration is ready. Password login already works.
-
-For the requested no-MetaMask buyer experience:
-- Create a Privy development app through https://docs.privy.io/.
-- Return its public app ID and whether localhost is allowed. Keep secrets private.
-- The existing DKM account database must remain authoritative. I implement and
-  test secure wallet binding/recovery; do not replace the account system yourself.
-- If obtaining this account is difficult, tell me the exact non-secret blocker;
-  do not purchase a plan before we confirm the demo needs it.
-
-### 6. Protect existing project data
-
-Back up the existing CONTENT_MASTER_KEY securely; never regenerate it over the
-old key. Back up the Docker database. Rotate the previously exposed RPC credential
-in its provider dashboard and update ignored local configuration. Share no keys.
-
-## My engineering work — not your implementation tasks
-
-Completed in the current Transak work:
-- [x] Staging-only secure session creation and verified-wallet destination.
-- [x] Real staging authentication and session creation tested.
-- [x] Encrypted shared token cache and serialized multi-worker token use.
-- [x] Account-scoped persistent provider order history and manual refresh.
-- [x] Server verification of order ID, wallet, BUY direction, Polygon and USDC.
-- [x] Display provider-reported amounts/fees without adding fees twice.
-- [x] No provider completion/dummy transaction grants access or spends MockUSDC.
-- [x] Backend concurrency/isolation/failure tests and frontend regression coverage.
-
-Still open; I must not describe these as owner-only tasks:
-- [ ] Blockchain payment-attestation/access integration and complete UI acceptance.
-- [ ] Compatible combined fiat payment/payout verification and blockchain recording.
-- [ ] Supported crypto swap/bridge execution. No arbitrary-token promise and no
-  supported LI.FI route into this Amoy custom-token deployment.
-- [ ] Persisted, expiring all-in asset quotes and insufficient-output handling.
-- [ ] Embedded-wallet integration after development-app access is available.
-- [ ] Automated provider reconciliation/refund workflow and sale-race handling.
-- [ ] Complete indexed auction/history/net earnings and acceptance verification.
-- [ ] Final feature-by-feature local acceptance run and report/demo evidence.
-- [ ] Required QAOA pricing and VQC embedding experiments, comparisons and report.
-
-The new Transak history is provider-verified, not independently chain-verified.
-It is limited to the 50 most recently checked saved orders. Users enter the provider
-order ID; automatic webhook discovery is not implemented. Provider-reported fees
-are not a pre-purchase DKM asset quote, and refreshing does not trigger settlement.
-
-## Latest seller preference implementation
-
-Account now saves a requested payout currency and can open Transak SELL sandbox.
-USDC/USD/EUR/INR/IDR are preference choices, not a guarantee that all routes work.
-Saving does not change active listing prices or cause automatic conversion.
-Enable SELL in the Transak partner portal if necessary. Test only documented
-sandbox payout details. EUR session creation worked, but no withdrawal completed.
-This is separate from completing and recording a marketplace purchase.
-
-## Do not spend time on these now
-
-Production domains, paid hosting, KYB, a mainnet deployment, mainnet gas, another
-fiat provider, an independent production audit, and live-money acceptance are
-outside the current local-demo run. They are not needed to test the existing app.
-
-## Completion rule
-
-The project is complete only when the agreed demo requirements are implemented
-and the full buyer/seller acceptance matrix passes. Working credentials and unit
-tests do not by themselves satisfy end-to-end fiat or cross-chain settlement.
-
-## Blockchain recording source (2026-10-10)
-
-Located and read both Hardhat skills; the earlier skill blocker is resolved.
-Added a standalone PaymentReceiptRegistry with authorized recorder roles,
-separate payment/payout denominations, immutable sandbox classification, duplicate
-internal/provider-reference rejection and terminal refund/chargeback records.
-It does not move funds or grant access. Existing deployments are untouched.
-See PAYMENT_RECORDING.md for evidence rules and the unfinished backend connection.
+Production hosting, mainnet, KYB/live fiat compliance, managed keys/signers,
+independent audit, sustained production load and richer scoring are outside this
+local-demo continuation. No claim of full project completion is made.

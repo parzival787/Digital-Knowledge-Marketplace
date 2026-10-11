@@ -2,6 +2,24 @@
 
 ## Current continuation (2026-10-11; supersedes stale blocker notes below)
 
+Current autonomous brief: attachment 64230ff7-b5da-4813-a67f-d7d2e04bdb40, continuing
+b49d5f6 on the same branch/draft PR. Do not rerun QAOA/VQC experiments. Milestone
+b871557 includes account-bound SELL sessions/history and audited conflict
+resolution; durable audit evidence/jobs with a disabled recorder; incremental
+current/legacy market indexing and exact payout-event accounting; dashboard views;
+read-only migration_inventory.json; local compiler upgrade to 0.8.37 after 128
+tests; and a successful 12-public-table PostgreSQL restore drill. Nothing deployed.
+See SECURITY_NOTES.md and MIGRATION_PLAN.md. Latest consolidated acceptance:
+68 backend tests, 12 frontend tests, production build, 128 contract tests and
+contract typecheck passed. The follow-up six-test index/source suite also passed,
+including the two new auction/refund decoding and queue fairness regressions.
+The temporary approval-review usage limit has cleared.
+Current positions are now paginated directly from confirmed chain state, separate
+from incomplete historical backfill. Welcome/signup UI verified in the browser.
+DEMO_RUNBOOK.md and HUMAN_ACTION_REQUIRED.md contain exact future acceptance steps.
+Final regression and signed-in dashboard/API inspection passed; implementation committed;
+PR #1 must stay draft/unmerged. Existing user changes remain excluded.
+
 The PDF baseline and active draft PR #1 at 6612caf were verified against GitHub
 and local git. Continue codex/dkm-payment-persistence; preserve unrelated changes.
 ENGINEERING_PLAN.md now orders the latest 19-phase local-demo brief;
@@ -27,7 +45,7 @@ unquoted. This is not a reservation or an atomic on-chain expected-price guard.
 Saved Transak BUY orders now have durable polling claims and retry scheduling.
 Completed evidence is preserved on provider failure; contradictory terminal
 statuses/amounts require review. This is provider evidence, never entitlement.
-SELL verification and an audited review-resolution workflow remain open.
+SELL verification and audited review resolution were completed in this continuation.
 
 Required QAOA/VQC experiments now have reproducible simulator implementations,
 measured reports in research_results and an authenticated /research page. QAOA

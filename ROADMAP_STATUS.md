@@ -1,10 +1,13 @@
-# DKM roadmap audit — 2026-09-30
+# DKM roadmap audit — updated 2026-10-11
 
 This maps the supplied 44-item roadmap to the current feature branch. “Implemented”
 means code exists and local checks support it; it does **not** mean production or
 live payment E2E completion. Items overlap, so counts are not an effort percentage.
 
-**25 implemented/local, 9 partial, 7 pending external rollout/E2E, 3 conditional research.**
+The old aggregate count is retired: QAOA/VQC are mandatory and implemented, and
+source completion differs from provider/deployment/interactive verification.
+Use FINAL_STATUS.md and MASTER_TODO.md for the current acceptance gates. The
+historical narrative after the table records earlier milestones, not current totals.
 
 | # | Roadmap item | Status | Evidence / remaining work |
 |---|---|---|---|
@@ -25,14 +28,14 @@ live payment E2E completion. Items overlap, so counts are not an effort percenta
 | 15 | Provider webhooks | Implemented | Raw-body HMAC plus provider capture/order/amount/currency verification |
 | 16 | Combined payment options | Implemented | Wallet and UPI/card UI; unavailable fiat setup is explicit |
 | 17 | Payment progress/recovery | Implemented | Status-specific messages, server order recovery, settlement retries |
-| 18 | Buyer history | Partial | Account Web2 orders plus paged fixed-price chain history; full indexed auction/lifetime history remains |
-| 19 | Seller transactions | Partial | Fixed-price sales, gross amount, route and transaction links; net earnings and complete auction reporting remain |
+| 18 | Buyer history | Implemented; backfill partial | Persistent current/legacy fixed/auction history, direct licenses/positions, provider orders, reviews, refunds and audit state; historical RPC coverage incomplete |
+| 19 | Seller transactions | Implemented; backfill partial | Exact gross/fee/royalty/net from payout events, listings/auctions and verified SELL history; no lifetime-total claim |
 | 20 | Upload/mint DB linkage | Implemented | Real stored vector ID; account, creator, both CIDs and price checked |
 | 21 | Storage health check | Implemented | Pinata configuration replaces obsolete NFT.Storage setting |
 | 22 | Persistent duplicate detection | Implemented | PostgreSQL hash lookup; concurrent insert guard; failures do not poison retries |
 | 23 | Payment validation | Implemented | Address, session, listing, active asset, price, entitlement, state and method checks |
 | 24 | Backend payment tests | Implemented | Runnable durable-state/provider/webhook/settlement/account tests |
-| 25 | Contract tests | Implemented | 121 tests pass after the audit fixes; contract TypeScript checks pass |
+| 25 | Contract tests | Locally tested | 128 tests on Solidity 0.8.37 and contract TypeScript checks pass |
 | 26 | Post-deploy addresses/ABIs | Pending | Current addresses preserved; must follow actual deployment, never point to undeployed code |
 | 27 | Full mint regression | Partial | Mock storage/mint-link tests and real document pipeline pass; live encrypted upload→mint still needs wallet test |
 | 28 | Search regression/filters | Implemented | Domain/price/minimum quality SQL + API/UI; existing 384D semantic/graph pipeline |
@@ -42,12 +45,12 @@ live payment E2E completion. Items overlap, so counts are not an effort percenta
 | 32 | Detail/access/download flow | Implemented | Entitlement check, protected download, legacy public link; download rechecks authorization |
 | 33 | Secure downloadable files | Implemented | New files AES-256-GCM encrypted before IPFS; server wraps keys and verifies integrity. Legacy public content cannot be made secret retroactively |
 | 34 | Reviews/reputation | Implemented | Verified purchaser writes, self-review rejection, 1–5 rating, concurrent update, public aggregate/pagination/UI |
-| 35 | Seller dashboard | Partial | Uploads/mint recovery, quality, asset links and fixed-price activity; consolidated listings/reviews/net lifetime earnings incomplete |
+| 35 | Seller dashboard | Implemented; browser checked | Upload/mint recovery, current listings/auctions, reviews, verified payout, indexed net accounting; signed-in empty states checked, signed sale/payout E2E remains |
 | 36 | Rich quality/review analysis | Conditional | Existing single LLM score only; coherence/completeness/originality benchmarks and review summaries absent |
 | 37 | QAOA pricing research | Implemented / locally benchmarked | 64 synthetic cases, classical/exact baselines, measured report and Research UI; 17.60% mean optimality gap, no advantage claim |
 | 38 | VQC embedding research | Implemented / locally benchmarked | Trained 384D compression/VQC/expansion, authored corpus and NDCG@10 report/UI; test 0.6093 versus original 0.9053; production search unchanged |
-| 39 | Production security hardening | Partial | Auth/CSRF/CORS/signatures/idempotency/encryption in place; abuse/load review, secret rotation, restore drill and independent audit remain |
-| 40 | Smart-contract audit | Partial | Slither completed, actionable ordering warnings fixed; 4 low timestamp and 1 informational compiler finding remain; independent audit still required |
+| 39 | Production security hardening | Partial | Local abuse/concurrency/restart/redaction checks and 12-table restore drill done; external key custody, rotation and production audit/load remain |
+| 40 | Smart-contract audit | Engineering reviewed | Registry included in Slither: 0 high/medium, 4 low timestamp, 1 informational pragma; known bugs reviewed and local compiler upgraded; no independent audit |
 | 41 | Production backend/DB | Pending | No Oracle host/domain/access, HTTPS, secrets, backup target or production sizing supplied |
 | 42 | Production frontend | Pending | Build passes; Vercel project/domain and production API origin unconfigured |
 | 43 | Mainnet migration | Pending | Intentionally gated on live E2E and security review; current token is Amoy MockUSDC |

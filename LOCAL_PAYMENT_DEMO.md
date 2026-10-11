@@ -1,5 +1,18 @@
 # Local payment demo — 2026-10-10
 
+## Current acceptance update — 2026-10-11
+
+DEMO_RUNBOOK.md is the exact current operator/interactive script and supersedes
+the older test counts below. Latest acceptance passed 68 backend tests, 12 frontend
+regressions, production build, 128 contract tests and typecheck. The six-test
+index/source follow-up also passed, including both newer regression cases.
+
+SELL verification/history, durable disabled audit recording, persistent indexing
+and direct current/legacy account positions are implemented. Provider-completed
+BUY/SELL, signed wallet E2E and deployed registry remain unverified. No new provider
+signup is required. Do not describe sandbox funding as conversion to Amoy MockUSDC,
+and do not add a second DKM fee to the buyer. Use FINAL_STATUS.md for exact limits.
+
 ## What was verified
 
 - The owner’s saved Transak staging credentials authenticated successfully.

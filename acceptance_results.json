@@ -1,0 +1,31 @@
+{
+  "started_utc": "2026-10-11T09:34:40.424956+00:00",
+  "scope": "local automated checks; provider/chain boundaries simulated in backend tests; no interactive E2E claim",
+  "checks": [
+    {
+      "check": "backend",
+      "exit_code": 0,
+      "seconds": 94.33
+    },
+    {
+      "check": "frontend-regressions",
+      "exit_code": 0,
+      "seconds": 1.33
+    },
+    {
+      "check": "frontend-build",
+      "exit_code": 0,
+      "seconds": 21.74
+    },
+    {
+      "check": "contracts",
+      "exit_code": 0,
+      "seconds": 4.47
+    },
+    {
+      "check": "contract-types",
+      "exit_code": 0,
+      "seconds": 0.42
+    }
+  ]
+}

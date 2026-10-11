@@ -1,56 +1,63 @@
-# Provider-independent blockchain payment records
+# Audit-only blockchain payment records
 
-## Implemented source
+PaymentReceiptRegistry records verified payment evidence. It never moves funds,
+changes NFT ownership or grants access. Marketplace.hasPurchased remains the
+license authority. The registry source and backend integration are implemented;
+there is no deployed registry or public recording claim.
 
-PaymentReceiptRegistry is a separate audit registry. It does not replace
-KnowledgeAsset or Marketplace and does not grant download access or move tokens.
-It can represent differing buyer-payment and seller-payout denominations. Each
-deployment has an immutable sandbox classification.
+## Implemented flow
 
-Only RECORDER_ROLE can write. The deployment admin can revoke/rotate recorder
-roles. Internal order references and provider reference commitments are each
-single-use. A payment hash commits to all original fields. Full-refund and
-chargeback events preserve that original hash and cannot return to Paid.
+Confirmed current/legacy sale event -> historical splitter payout verification ->
+immutable payment_evidence -> durable receipt_jobs -> separate recorder signer ->
+signed transaction checkpoint -> identical-byte retry -> canonical transaction,
+calldata, emitted event and stored payment hash verification -> recorded status.
 
-The contract records what an authorized backend attests. It does not verify banks,
-provider signatures, bank payout eligibility, FX rates, or a token transfer on a
-different chain. Access MUST NOT be derived from this registry alone.
+The source payment is rechecked immediately before signing/broadcast. Reorgs,
+configuration changes and contradictory evidence enter review_required. An
+uncertain signed job blocks new nonce allocation. Jobs use database advisory locks;
+polling rotates pending work so old unfinished evidence cannot starve later work.
 
-## Fields and trust boundary
+The adapter accepts Amoy Marketplace sales and independently verified Razorpay
+test captures associated with completed funded purchases. Funding-only Transak
+BUY, standalone SELL, mock payments and client redirects cannot create sale
+evidence. SELL history remains separate because no verified asset-sale association
+exists for a standalone withdrawal.
 
-- assetContract/tokenId identify the asset on the record's chain.
-- buyer/seller are public wallet identifiers, not email or bank account numbers.
-- paymentCurrency/payoutCurrency are bytes32 denomination commitments; use a
-  versioned canonical identifier including decimals and, for crypto, chain ID
-  and token address. Payment/payout amounts are integer units of those respective
-  denominations; do not reinterpret INR paise as token base units.
-- payoutAmount is the verified net amount actually paid to the seller. A preference,
-  quoted amount or buyer wallet funding event is not payout confirmation.
-- providerReference must be a deterministic secret-keyed commitment scoped by
-  provider and environment, so retries cannot use a new salt to evade deduplication.
-- evidenceHash must commit to an allowlisted, canonical verified receipt with a
-  private random salt. Never publish raw payment identifiers, bank/card details,
-  email, identity documents, private keys or low-entropy unsalted personal data.
+Payment and payout denominations commit to token chain/address/base units or ISO
+currency/decimals. Integer amounts preserve units. The payout amount is actual
+splitter seller net; the existing seller-paid platform fee is not added again to
+the buyer. Raw provider IDs, KYC, emails, bank/card data and keys never go on chain.
+Provider references use environment/provider-domain HMAC; source evidence uses a
+private random salt. Preserve the content master key during rotation planning:
+existing reference deduplication and encrypted content depend on it.
 
-## Required backend connection — not implemented yet
+## States and reversals
 
-1. Persist the seller's effective price/payout agreement and an expiring buyer quote.
-2. Verify payment AND seller payout with the relevant provider (or on-chain proof).
-   A client redirect, sandbox success message, preference, or arbitrary administrator
-   input must not be accepted as paid evidence.
-3. Persist an immutable normalized receipt and recording job before signing.
-4. Serialize the recorder nonce; checkpoint signed transaction/hash before broadcast.
-   Reuse the existing settlement checkpoint pattern, but keep the dedicated
-   recording signer separate from the token-spending settlement signer.
-5. Retry the identical signed transaction; on receipt, verify canonical block,
-   transaction target/calldata, event, stored payment hash and status.
-6. Show payment verified / blockchain pending / recorded separately. A record alone
-   must not activate access. Marketplace entitlement integration needs its own
-   reviewed design, asset/listing authorization and sale-race/refund handling.
-7. Verify reversals from the provider before recording their evidence; retain the
-   original record. Partial refunds and dispute-resolution reversals need a later
-   explicit state model; this contract only supports full terminal reversals.
+Provider evidence has pending verification and verified/conflict states in its own
+order ledger. Only verified sale evidence enters the recorder: verified ->
+recording -> recorded, or review_required. Temporary RPC failure retains the
+checkpoint and a generic error. A submitted hash is not proof of confirmation.
 
-No provider-recording API, signer configuration, deployment, public chain write or
-entitlement integration is claimed by the standalone contract implementation.
-Existing MetaMask purchase events remain the record for existing on-chain purchases.
+Full Razorpay test refunds are fetched server-side and linked to the immutable
+original record. The registry/job model supports terminal full refund (2) and
+chargeback (3). Automatic chargeback ingestion is not claimed: it needs an
+authenticated provider dispute source and verified eligibility; no public endpoint
+accepts a user's or operator's assertion of a chargeback. Partial reversals are
+unsupported and require review rather than fabricated full-refund evidence.
+
+## Configuration and operations
+
+RECEIPT_RECORDING_ENABLED defaults false. After separately approved deployment,
+configure PAYMENT_RECEIPT_REGISTRY_ADDRESS and a dedicated
+RECEIPT_RECORDER_PRIVATE_KEY, distinct from SETTLEMENT_PRIVATE_KEY, in ignored
+backend/.env. The registry must be on chain 80002, sandbox=true, with the recorder
+role granted. Never commit these keys. Preserve signed checkpoints during recovery;
+do not delete uncertain jobs or blindly re-sign. Investigate held evidence and
+canonical receipts before any operational repair.
+
+GET /api/payments/recordings shows sanitized audit status to the buyer and verified
+seller wallet. Dashboard distinguishes reversal, pending, recorded and review.
+No arbitrary evidence-creation or force-complete API is exposed.
+
+See MIGRATION_PLAN.md for approval/rollback, SECURITY_NOTES.md for verification,
+and DEMO_RUNBOOK.md for local versus deployed acceptance.
