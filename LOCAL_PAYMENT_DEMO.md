@@ -1,3 +1,15 @@
+## Superseding sandbox route — 2026-10-12
+
+After explicit approval, a NEW TRNSK market and splitter will share the existing
+KnowledgeAsset, alongside an audit-only registry. Current active market remains
+MockUSDC. Transak staging USDC/Polygon request delivers TRNSK/Amoy; asset-bound
+funding quote -> provider verification -> independent token delivery -> separate
+approval/purchase -> hasPurchased. SELL is bound to verified TRNSK sale proceeds.
+Razorpay remains test-mode prefunded settlement, not currency conversion.
+Runtime availability/fees are provider-derived: current probe did not offer UPI.
+See DEMO_RUNBOOK.md and HUMAN_ACTION_REQUIRED.md. All older counts/deployment
+options below are historical; current results are in FINAL_STATUS.md.
+
 # Local payment demo — 2026-10-10
 
 ## Current acceptance update — 2026-10-11

@@ -1,3 +1,13 @@
+## TRNSK denomination update — 2026-10-12
+
+Direct-market evidence records the market's actual ERC20 token/base units and
+canonical splitter seller proceeds; six-decimal legacy and eighteen-decimal
+TRNSK totals are separate. Razorpay evidence retains test-INR provider payment
+and actual on-chain settlement-token payout. Old orders retain explicit legacy
+amount fallback. Transak funding alone never queues an asset-purchase receipt.
+The new sandbox registry is prepared, not deployed. Recording is disabled and
+requires a separate approved/funded signer. No provider status grants access.
+
 # Audit-only blockchain payment records
 
 PaymentReceiptRegistry records verified payment evidence. It never moves funds,

@@ -50,6 +50,24 @@ class IndexTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(index.first_code_block(w3,'market',100),37)
         self.assertEqual(index.normalized({'amount':2**200})['amount'],str(2**200))
 
+    async def test_rpc_failure_shrinks_page_and_persists_backoff_without_advancing(self):
+        mock=patch.object(index,'get_conn',self.isolated);mock.start();self.addCleanup(mock.stop)
+        await index.setup_indexer()
+        address='0x'+'5'*40
+        eth=SimpleNamespace(chain_id=80002,block_number=100)
+        with patch.object(index.blockchain,'w3',SimpleNamespace(eth=eth)),patch.object(index,'first_code_block',return_value=10),patch.object(index,'fetch_page',side_effect=RuntimeError('RPC range rejected')) as fetch:
+            with self.assertRaises(RuntimeError):await index.sync_market(address)
+            await index.sync_market(address)
+            self.assertEqual(fetch.call_count,1)
+        conn=await self.isolated()
+        try:
+            row=await conn.fetchrow('SELECT * FROM chain_sync WHERE market=$1',address)
+            self.assertEqual(row['next_block'],10)
+            self.assertEqual(row['page_size'],5)
+            self.assertEqual(row['failures'],1)
+            self.assertIsNotNone(row['retry_after'])
+        finally:await conn.close()
+
     def test_auction_and_refund_logs_decode_with_market_identity(self):
         market_address='0x'+'1'*40;buyer='0x'+'2'*40;seller='0x'+'3'*40
         block_hash=HexBytes('0x'+'a'*64);tx_hash=HexBytes('0x'+'b'*64)

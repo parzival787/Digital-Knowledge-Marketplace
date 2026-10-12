@@ -1,43 +1,33 @@
-# DKM status — engineering still in progress
+# DKM status — 2026-10-12
 
-This file is a current status record, not a completion declaration.
+Pre-deployment engineering for the TRNSK college sandbox is implemented and
+automated acceptance passed. The complete interactive college demo is NOT yet
+finished: explicit deployment approval, public role addresses, test funding,
+wallet signatures and hosted provider checkout remain required.
 
-| Evidence level | Current state |
-| --- | --- |
-| IMPLEMENTED | Existing core marketplace/auth/content/auction flows; mandatory QAOA/VQC; BUY reconciliation; SELL account references/history/conflict audit; audit job persistence and recorder; confirmed event index; dashboard additions |
-| LOCALLY TESTED | See TEST_EVIDENCE.md and acceptance_results.json; source-adapter, provider, recorder, indexer and contract tests cover simulated failure/concurrency boundaries |
-| PROVIDER VERIFIED | Earlier Transak staging authentication and BUY/SELL session creation only; no completed SELL bank payout claimed |
-| INTERACTIVE E2E VERIFIED | Final seller/buyer/two-bidder/provider acceptance not performed |
-| HUMAN/EXTERNAL BLOCKED | Signed wallet interactions, provider-supported completed sandbox BUY/SELL, registry deployment approval and separate recorder custody |
-| DEFERRED PRODUCTION-ONLY | Mainnet, hosting, independent audit, regulated live fiat route, managed signing/KYB and production-scale capacity |
+| Evidence | Actual result |
+|---|---|
+| Implemented | Generic 6/18-decimal market profiles; explicit seller prices; listing-bound BUY; sale-bound SELL; provider quotes/fees; canonical token delivery; dynamic Razorpay settlement; legacy preservation; adaptive indexing; guarded deployment package |
+| Automated | 82 backend tests, 15 frontend tests, frontend production build, 129 contract tests and contract typecheck passed; final 11-test Transak/funding follow-up passed |
+| Read-only Amoy | TRNSK verified at official address, symbol TRNSK, decimals 18, code and ERC20 calls; current market unchanged |
+| Provider API | Staging coverage and BUY quote verified; observed USD/EUR cards, no INR/UPI in localhost lookup |
+| Browser | Welcome/signup authentication-only navigation verified; Google setup pending |
+| Not yet run | Approved deployment, real staging token delivery/purchase/SELL, signed S/B1/B2 auction and live audit recording |
+| Production excluded | Mainnet, universal crypto support, real-money FX, hosting, KYB, independent audit and managed signing |
 
-Latest automated run passed 68 backend tests, 12 frontend tests, production build,
-128 contract tests and contract typecheck. Welcome/signup were checked in-browser.
-DEMO_RUNBOOK.md provides exact steps; HUMAN_ACTION_REQUIRED.md uses the requested
-action format. Direct paginated positions now show current/legacy licenses,
-seller listings, highest auction bids and refundable balances independently of
-historical indexing.
+Existing core account/content/mint/search/reviews, durable payment recovery,
+receipt audit jobs, legacy access and required QAOA/VQC implementations remain.
+No QAOA/VQC rerun or production search/pricing change was made.
 
-The six-test index/source follow-up also passed, including both latest regressions.
-The temporary approval-review quota is resolved. Signed-in dashboard and six APIs
-were checked with a disposable account; direct Amoy positions resolved. Logout
-restored the welcome screen, and the fixture account/sessions were removed.
-Implementation milestone is committed as b871557 on the existing PR branch.
-Documentation and evidence accompany it; PR #1 stays draft and unmerged.
+Active contracts and legacy configuration are unchanged. Settlement and recording
+workers are disabled; separate signer keys are absent. CONTENT_MASTER_KEY exists
+without exposing its value. Google credentials are absent.
 
-External limits: completed Transak BUY/SELL evidence, Google setup, signed wallet
-acceptance, approved registry/funded-market deployment, full historical RPC
-backfill and migration sign-off. Chargeback linkage exists in the registry/job
-model, but automatic provider dispute ingestion is unverified/unimplemented;
-no arbitrary chargeback assertion can be submitted. Partial reversals unsupported.
-The current bounded backfill must not be called lifetime history. No new provider
-signup is requested, and no real fiat conversion or universal currency support is
-claimed. The project is not yet complete.
+History remains an indexed range, not complete lifetime totals. The bounded RPC
+attempt preserved its checkpoint on error. Direct entitlement checks remain usable.
+The existing restore drill covered its then-current 12 tables; new tables have not
+been included in another full restore drill. Prior Slither result remains 0 high,
+0 medium, 4 timestamp lows, 1 compiler informational; no Solidity source changed.
 
-Public RPC fallback was investigated: the old Polygon endpoint is retired; the
-documented dRPC replacement rejected the historical request (details in
-TEST_EVIDENCE.md). No RPC credentials were changed. Full-history completion still
-needs suitable RPC access; it is not a missing dashboard feature.
-
-QAOA/VQC are required and implemented; their honest underperformance against the
-classical baselines remains documented. Production search is unchanged.
+See HUMAN_ACTION_REQUIRED.md for the approval package, MIGRATION_PLAN.md for
+constructors/activation/rollback and DEMO_RUNBOOK.md for final observed acceptance.

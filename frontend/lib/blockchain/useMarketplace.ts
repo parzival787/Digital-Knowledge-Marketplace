@@ -133,14 +133,14 @@ export function useMarketplaceWrite() {
 /**
  * MockUSDC approval for marketplace purchases.
  */
-export function useUSDCWrite() {
+export function useUSDCWrite(tokenAddress: `0x${string}`) {
   const usdcApproval = useWriteContract();
 
   function approveMarketplace(amount: bigint, account: `0x${string}`) {
     return usdcApproval.writeContractAsync({
       account,
       chainId: polygonAmoy.id,
-      address: mockUSDCContract.address,
+      address: tokenAddress,
       abi: mockUSDCContract.abi,
       functionName: "approve",
       args: [

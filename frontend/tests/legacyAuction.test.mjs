@@ -16,7 +16,8 @@ test("old auction reads, approval, bid, finalization and refund target the selec
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
   }).outputText, { module, exports: module.exports, require(name) {
     if (name === "react") return { useEffect() {}, useState() { const i=cursor++; return [state[i], v => state[i]=v]; } };
-    if (name === "@/lib/api/capabilities") return { usePaymentCapabilities: () => ({data:{markets:[]},isError:false}), marketRouteAvailable: () => true };
+    if (name === "@/lib/api/capabilities") return { usePaymentCapabilities: () => ({data:{markets:[{address:old,token_address:current,decimals:6,symbol:"MockUSDC",paused:false}]},isError:false}), marketRouteAvailable: () => true };
+    if (name === "@/lib/blockchain/paymentToken") return {paymentToken:profile=>({address:profile.token_address,abi:[]}),paymentAmount:(value,decimals)=>require("viem").parseUnits(value,decimals)};
     if (name === "@/providers/AuthProvider") return { useVerifiedWallet: () => true };
     if (name === "@tanstack/react-query") return { useQueryClient: () => ({ invalidateQueries: async () => {} }) };
     if (name === "next/link") return () => null;

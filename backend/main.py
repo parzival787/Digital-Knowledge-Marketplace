@@ -35,6 +35,9 @@ from services.reviews import router as reviews_router
 from services.content_security import seal, unseal, master_key
 from services.payments.transak import router as transak_router, setup_transak
 from services.payments.quotes import router as quotes_router, setup_quotes
+from services.payments.transak_discovery import router as discovery_router
+from services.payments.asset_funding import setup_funding
+from services.payments import sale_payouts
 from services.research_results import router as research_router
 from services.payments.payouts import setup_payouts
 from services.payments.recording import router as recording_router, setup_recording, recording_worker
@@ -49,6 +52,7 @@ app.include_router(auth_router)
 app.include_router(reviews_router)
 app.include_router(transak_router)
 app.include_router(quotes_router)
+app.include_router(discovery_router)
 app.include_router(research_router)
 app.include_router(recording_router)
 app.include_router(index_router)
@@ -99,6 +103,7 @@ async def startup():
     if os.getenv("RECEIPT_RECORDING_ENABLED") == "true":
         app.state.recording_task = asyncio.create_task(recording_worker())
     await setup_quotes()
+    await setup_funding()
     if os.getenv("TRANSAK_RECONCILIATION_ENABLED", "true") == "true":
         from services.payments.transak import configuration, reconciliation_worker
         try:

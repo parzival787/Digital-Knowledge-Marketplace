@@ -3,9 +3,14 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "./client";
 
 export type PaymentRoute = { enabled: boolean; state: string; message: string; purpose: string; sandbox_only: boolean };
+export type MarketProfile = {
+  address: string; token_address: string; symbol: string; name: string; decimals: number;
+  chain_id: number; environment: "sandbox"; current: boolean; legacy: boolean;
+  paused: boolean; purchase_enabled: boolean; auction_enabled: boolean; new_bids_enabled: boolean; splitter_address: string;
+};
 export type Capabilities = {
   version: number; chain_id: number;
-  markets: { address: string; token_address: string; paused: boolean }[];
+  markets: MarketProfile[];
   routes: Record<string, PaymentRoute>;
 };
 export function usePaymentCapabilities() {

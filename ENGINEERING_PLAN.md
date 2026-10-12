@@ -1,40 +1,32 @@
-# DKM local college demo engineering plan
+# Active TRNSK plan — 2026-10-12
 
-Updated 2026-10-11. Continue codex/dkm-payment-persistence and draft PR #1.
-Current work extends b49d5f6. No public deployment, merge or funds spending.
+Continue codex/dkm-payment-persistence and existing draft PR #1 from 83e8ea2.
+No new PR, deployment, merge, mainnet, real-money payment or research rerun.
 
-## Implemented in this continuation
+## Completed before deployment
 
-1. Account-bound Transak SELL sessions, durable order history, server-side binding/
-   currency verification, conflict holds and audited operator resolution.
-2. Immutable audit evidence, durable receipt/reversal jobs, separate recorder
-   configuration, checkpoint-before-broadcast, nonce serialization and canonical
-   source/transaction/event checks. Recording remains disabled.
-3. Current/legacy event indexing, durable checkpoints, reorg holds, exact payout
-   event accounting, reconciliation command and account-scoped history.
-4. Direct paginated wallet positions, licenses, listings, highest auction bids,
-   refundable balances, provider histories, reviews and recording status.
-5. Read-only migration inventory, preserved KnowledgeAsset, legacy API/UI tests,
-   compiler upgrade review, Slither and PostgreSQL restore drill.
-6. Consolidated automated acceptance and separate human demo runbook.
+1. Read-only official TRNSK Amoy verification and sanitized evidence.
+2. Per-market token metadata, exact 6/18-decimal amounts, seller-confirmed listings/
+   auction reserves, quotes, balances/allowances and token-separated history.
+3. Runtime Transak coverage and fees; unsupported methods remain unavailable.
+4. Persisted listing/account/wallet-bound BUY with fresh quote review, provider
+   evidence and independent canonical TRNSK delivery. Funding is never access.
+5. Sale/account/amount-bound SELL with server verification, durable concurrency
+   guards, conflict holds and separate outgoing-transfer evidence.
+6. Dynamic Razorpay test-mode prefunded settlement and legacy amount compatibility.
+7. Audit-only recording using actual sale denominations and seller proceeds.
+8. Cross-market listing preflight, old access/refunds preserved, migration snapshot.
+9. Fail-closed Amoy preparation/deployment script, public role template, rollback.
+10. Persistent adaptive indexing/backoff and local automated acceptance.
 
-Capabilities, five-minute fixed-price quotes, QAOA and VQC were already completed.
-Research results are preserved; no experiments were rerun. QAOA/VQC are required,
-and their measured underperformance is reported honestly.
+## Approval-dependent sequence
 
-## Verification and external gates
+Request exactly the deployment package in HUMAN_ACTION_REQUIRED.md after review.
+With explicit approval/public roles: read-only final plan, estimate gas, deploy
+ONLY three named contracts and wire ONLY the new splitter, verify manifest,
+then activate current/legacy configuration. Re-run acceptance.
+Fund separate settlement/recorder test wallets and bounded allowance only with
+authorization. Run S/B1/B2 hosted/wallet acceptance, save sanitized evidence and
+update FINAL_STATUS.md. Google configuration remains a human action if required.
 
-Use acceptance_results.json and TEST_EVIDENCE.md for actual run outcomes.
-Provider fixtures are not completed Transak transactions. Historical backfill is
-still incomplete: the configured RPC allows small log pages over millions of
-blocks. Direct positions do not depend on that backfill.
-
-HUMAN_ACTION_REQUIRED.md and DEMO_RUNBOOK.md cover wallet signatures, provider
-interaction, Google setup if desired and future deployment approval. Codex owns
-all code, database, tests and reconciliation commands. MIGRATION_PLAN.md is a
-proposal, never authorization. Production hosting, live fiat licensing/KYB,
-independent audit and managed signing remain production-only.
-
-The existing Razorpay test funded-treasury route is not INR-to-USDC conversion.
-Transak sandbox funding does not provide Amoy MockUSDC. No universal currency,
-UPI availability, FX quote or seller bank payout is inferred from integration code.
+All production-only work is separated from the local college definition of done.

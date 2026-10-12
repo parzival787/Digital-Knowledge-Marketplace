@@ -1,3 +1,31 @@
+## Latest TRNSK acceptance — 2026-10-12
+
+- Consolidated acceptance_results.json: 82 backend tests, 15 frontend regressions,
+  production frontend build, 129 contract tests and contract typecheck passed.
+- Additional canonical-sale eligibility test passed: correct seller/token/positive
+  proceeds, changed block and rejected mismatches. This test is included in the 82-test run. Final Transak/funding follow-up: 11 passed.
+- Deployment script rejected the in-process non-Amoy network before any journal
+  or public transaction. An initial sandbox command could not load local Hardhat;
+  the subsequent permitted run executed the script and verified the guard.
+- Read-only TRNSK evidence: transak_token_evidence.json. Chain 80002, contract code,
+  TRNSK symbol, 18 decimals, balance/allowance and zero-value approve/transfer
+  eth_call passed. These calls do not prove funded transfers.
+- Provider coverage/quote evidence: transak_coverage_evidence.json. Actual staging
+  API response offered USD/EUR card methods, no INR/UPI for localhost lookup.
+  Observed 10-token BUY quote USD 11.46 total with USD 1.46 provider fees; this is
+  expired evidence, not a current price or real FX claim. No order was paid.
+- Migration snapshot refreshed at block 49969644, five listings, zero auctions,
+  matching app configuration. Old addresses/wiring preserved.
+- Restarted API returned old token USDC/6 and both purchase/auction capability;
+  Razorpay unavailable with absent signer. Browser welcome/signup show only auth
+  navigation; Google reports setup pending. No wallet/provider E2E was simulated
+  into a live-success claim.
+- Bounded adaptive history attempt left next_block 45942252, state backfilling,
+  error 'Indexer unavailable; checkpoint preserved'. Full history is unverified.
+- Original QAOA/VQC and backup/Slither evidence retained; no research rerun.
+
+Everything below records earlier milestones and is superseded by this section.
+
 # Verification evidence
 
 ## Autonomous remaining-work continuation (after b49d5f6)
@@ -126,3 +154,5 @@ not a contract migration. The PDF's older tests remain historical evidence only.
   Final on-chain terms can change after the last read; the deployed buyAsset
   method does not bind an expected quote hash. This race needs explicit treatment
   in the deployment/failure review. No wallet purchase was signed for these tests.
+
+Final staging coverage/quote probe refreshed successfully with the same supported routes and amounts. Staged exact-local-credential scan: no matches; unrelated enrichment edit excluded. Build has the existing optional WalletConnect pino-pretty warning; build/typecheck passed.

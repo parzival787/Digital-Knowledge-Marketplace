@@ -1,8 +1,8 @@
 {
-  "captured_at": "2026-10-11T04:24:57.912530+00:00",
+  "captured_at": "2026-10-12T08:02:36.270364+00:00",
   "chain_id": 80002,
-  "block": 49870192,
-  "block_hash": "0x56497446fb2c941ddb92c400a7cea6a3930020abc11b4167611d9b2145ea005b",
+  "block": 49969644,
+  "block_hash": "0xf1bb93a9aa87b151c7d0d655e6f8877b641475422bac17d0d27dd091e201da5e",
   "knowledge_asset": "0x2C16409A3db9880f9A70e71B5b131A17db533Fc9",
   "frontend_backend_match": true,
   "legacy_marketplaces": [],
@@ -72,7 +72,7 @@
     {
       "market": "0xde7bdacb8b3ff631dbcdb09c81c0de7421475a5d",
       "deployment_block": 45927547,
-      "next_block": 45927567,
+      "next_block": 45942202,
       "state": "backfilling"
     }
   ],

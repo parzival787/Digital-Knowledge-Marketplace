@@ -1,3 +1,19 @@
+## TRNSK continuation checks — 2026-10-12
+
+CONTENT_MASTER_KEY presence confirmed without revealing it. Settlement/recorder
+keys are absent; workers disabled. Deployment requires distinct admin, settlement
+and recorder public roles; existing runtime recorder separation guard remains.
+Asset funding preserves prior verified delivery evidence on later conflict but
+marks current verification unverified/review-required. A database unique delivery
+transaction prevents reuse. BUY/SELL persist session attempts before provider
+calls; uncertain attempts cannot silently create a duplicate session.
+Canonical wrong-token/wallet/chain/hash/reverted/removed/malformed Transfer checks
+and concurrent session checks pass. Local tests do not prove production capacity.
+No Solidity source changed; previous Slither evidence remains unchanged. Existing
+restore drill covers its original 12 tables, not a fresh drill of newly added
+funding tables. Human content-key backup/RPC rotation and production audit/custody
+remain separate. Review HUMAN_ACTION_REQUIRED.md before enabling signing.
+
 # Local demo security evidence — 2026-10-11
 
 This is an engineering review, not an independent security audit or production

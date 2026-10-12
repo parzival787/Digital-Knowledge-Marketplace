@@ -1,31 +1,31 @@
 {
-  "started_utc": "2026-10-11T09:34:40.424956+00:00",
+  "started_utc": "2026-10-12T08:16:25.260542+00:00",
   "scope": "local automated checks; provider/chain boundaries simulated in backend tests; no interactive E2E claim",
   "checks": [
     {
       "check": "backend",
       "exit_code": 0,
-      "seconds": 94.33
+      "seconds": 103.61
     },
     {
       "check": "frontend-regressions",
       "exit_code": 0,
-      "seconds": 1.33
+      "seconds": 1.97
     },
     {
       "check": "frontend-build",
       "exit_code": 0,
-      "seconds": 21.74
+      "seconds": 21.82
     },
     {
       "check": "contracts",
       "exit_code": 0,
-      "seconds": 4.47
+      "seconds": 4.79
     },
     {
       "check": "contract-types",
       "exit_code": 0,
-      "seconds": 0.42
+      "seconds": 0.46
     }
   ]
 }

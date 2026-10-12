@@ -7,8 +7,7 @@ import json
 import re
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict
-from typing import Literal
+from pydantic import BaseModel, ConfigDict, Field
 import os
 import time
 from urllib.parse import urlsplit
@@ -84,8 +83,8 @@ async def access_token(conn, client, key, secret, fingerprint, row):
     return token
 
 
-async def create_session(wallet, user_ip, payout_currency=None, partner_order=None, partner_customer=None):
-    if payout_currency is not None and payout_currency not in ("USD", "EUR", "INR", "IDR"):
+async def create_session(wallet, user_ip, payout_currency=None, partner_order=None, partner_customer=None, reviewed_quote=None):
+    if payout_currency is not None and (not isinstance(payout_currency, str) or not re.fullmatch(r"[A-Z]{3}", payout_currency)):
         raise ValueError("Unsupported payout currency preference")
     key, secret = configuration()
     ipaddress.ip_address(user_ip)
@@ -98,6 +97,14 @@ async def create_session(wallet, user_ip, payout_currency=None, partner_order=No
     else:
         params.update(productsAvailed="BUY", cryptoCurrencyCode="USDC", network="polygon",
                       walletAddress=wallet, disableWalletAddressForm=True)
+    if partner_order and partner_customer:
+        params.update(partnerOrderId=str(partner_order), partnerCustomerId=str(partner_customer))
+    if reviewed_quote:
+        params.update(fiatCurrency=reviewed_quote["fiatCurrency"], paymentMethod=reviewed_quote["paymentMethod"],
+                      cryptoCurrencyCode="USDC", network="polygon")
+        # BUY fixes the reviewed fiat total; delivered crypto must still be verified.
+        params.update({"cryptoAmount" if payout_currency else "fiatAmount":
+                       reviewed_quote["cryptoAmount"] if payout_currency else reviewed_quote["fiatAmount"]})
     fingerprint = hashlib.sha256((key + ":" + secret).encode()).hexdigest()
     conn = await get_conn()
     try:
@@ -218,7 +225,15 @@ async def refresh_order(order_id, user):
                 data = await provider_json(client, "https://api-stg.transak.com/partners/api/v2/order/" + order_id,
                     method="GET", headers={"access-token": token, "x-api-key": key})
             receipt = verified_order(data, order_id, user["wallet_address"])
-            receipt = reconcile_receipt(json.loads(existing["receipt"]) if existing else None, receipt)
+            previous = json.loads(existing["receipt"]) if existing else None
+            receipt = reconcile_receipt(previous, receipt)
+            from .asset_funding import reconcile_funding
+            if previous and previous.get("funding_id") and data.get("partnerOrderId") != previous["funding_id"]:
+                receipt = {**previous, "verification_state": "review_required", "funding_state": "review_required"}
+                await conn.execute("UPDATE asset_funding SET state='review_required',updated_at=NOW() WHERE id=$1 AND user_id=$2",
+                                   UUID(previous["funding_id"]), user["id"])
+            else:
+                receipt = await reconcile_funding(conn, data, receipt, user)
             await conn.execute("""INSERT INTO transak_staging_orders(order_id,user_id,wallet_address,receipt)
                 VALUES ($1,$2,$3,$4) ON CONFLICT (order_id) DO UPDATE SET receipt=$4,checked_at=NOW()
                 """, UUID(order_id), user["id"], user["wallet_address"], json.dumps(receipt))
@@ -291,7 +306,7 @@ async def reconciliation_worker():
 
 class PayoutPreference(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    currency: Literal["USDC", "USD", "EUR", "INR", "IDR"]
+    currency: str = Field(pattern=r"^(?:[A-Z]{3}|USDC)$")
 
 
 @router.get("/payout-preference")
@@ -306,7 +321,15 @@ async def payout_preference(user=Depends(current_user)):
 
 
 @router.put("/payout-preference")
-async def save_payout_preference(body: PayoutPreference, user=Depends(current_user)):
+async def save_payout_preference(body: PayoutPreference, request: Request, user=Depends(current_user)):
+    if body.currency != "USDC":
+        from .transak_discovery import discover
+        try:
+            coverage = await discover(request.client.host if request.client else "")
+        except Exception:
+            raise HTTPException(503, "Could not verify payout currency availability") from None
+        if not any(c["symbol"] == body.currency and any(m["sell"] for m in c["methods"]) for c in coverage["fiat"]):
+            raise HTTPException(422, "Payout currency is unavailable")
     conn = await get_conn()
     try:
         await conn.execute("UPDATE app_users SET payout_currency=$1 WHERE id=$2", body.currency, user["id"])
@@ -317,14 +340,4 @@ async def save_payout_preference(body: PayoutPreference, user=Depends(current_us
 
 @router.post("/payout-session")
 async def payout_session(request: Request, user=Depends(wallet_user)):
-    await throttle(request, "transak-payout:" + str(user["id"]))
-    preference = await payout_preference(user)
-    if preference["currency"] == "USDC":
-        raise HTTPException(409, "Choose a fiat withdrawal preference first. USDC wallet payments do not require an off-ramp.")
-    try:
-        from services.payments.payouts import create_payout
-        url = await create_payout(user, request.client.host if request.client else "", preference["currency"])
-    except Exception:
-        raise HTTPException(503, "Transak sandbox withdrawal is unavailable. SELL must be enabled by the provider and the selected currency must be supported.") from None
-    return {"widget_url": url, "environment": "staging", "grants_access": False,
-            "automatic_payout_enabled": False, "expires_in_seconds": 300}
+    raise HTTPException(409, "Select verified sale proceeds and review a payout quote in Account before opening withdrawal.")

@@ -42,6 +42,10 @@ class PaymentOrder(BaseModel):
     buyer_address: str
 
     amount_usdc: int
+    payment_token: Optional[str] = None
+    payment_symbol: Optional[str] = None
+    payment_decimals: Optional[int] = Field(default=None, ge=0, le=77)
+    payment_amount_base_units: Optional[str] = Field(default=None, pattern=r"^[0-9]+$")
 
     payment_method: PaymentMethod
     status: PaymentStatus

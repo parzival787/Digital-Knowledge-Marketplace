@@ -1,51 +1,63 @@
-# Preserve existing marketplace access
+# TRNSK sandbox migration — 2026-10-12
 
-No deployment is authorized. migration_inventory.json is a block-pinned read-only
-snapshot, not a deployment manifest. It found five fixed listings and no auctions;
-frontend/backend legacy configurations match. Full buyer discovery is incomplete
-until the event backfill finishes. Unknown mapping keys cannot be enumerated by
-reading Solidity storage getters alone.
+No public deployment or application switch has been authorized or performed.
+New marketplace: TRNSK, 18 decimals. Existing marketplace: original MockUSDC
+contract (on-chain symbol USDC), 6 decimals. Units must never be mixed.
 
-## Contracts and invariants
+## Preserved contracts
 
-- Preserve KnowledgeAsset: 0x2C16409A3db9880f9A70e71B5b131A17db533Fc9.
-- Current Marketplace: 0xDe7bdacb8B3ff631dbcdb09C81c0de7421475A5d.
-- Current RoyaltySplitter: 0x43cE72CEd667bDe9252044451b07ecA1aec2D300.
-- Current MockUSDC: 0x0bd22C54F90E7309dd5e7e73270Ac72d4cD74719.
-- Currently configured legacy list: empty. Preserve old markets in both frontend
-  and backend lists when switching; never erase them from entitlement checks.
-- A new PaymentReceiptRegistry can coexist independently. It cannot replace
-  Marketplace.hasPurchased, move funds or migrate NFT ownership.
-- If funded buyAssetFor is needed, deploy a new Marketplace and a separate new
-  RoyaltySplitter using the existing KnowledgeAsset/token. Do not repoint the old
-  splitter away from its market while old listings/auctions still need it.
+| Contract | Amoy address |
+|---|---|
+| KnowledgeAsset | 0x2C16409A3db9880f9A70e71B5b131A17db533Fc9 |
+| Existing Marketplace | 0xDe7bdacb8B3ff631dbcdb09C81c0de7421475A5d |
+| Existing RoyaltySplitter | 0x43cE72CEd667bDe9252044451b07ecA1aec2D300 |
+| Existing MockUSDC | 0x0bd22C54F90E7309dd5e7e73270Ac72d4cD74719 |
+| Verified TRNSK | 0x0c86A754A29714C4Fe9C6F1359fa7099eD174c0b |
 
-## Deployment approval package (not a request to deploy now)
+migration_inventory.json is a read-only snapshot at block 49969644: five listings,
+zero auctions, matching frontend/backend configuration, code hashes and known
+wallet entitlements. All historical buyers are not yet discoverable because log
+backfill is incomplete; direct hasPurchased remains authoritative.
+Refresh this inventory immediately before activation.
 
-ACTION REQUIRED: Later approve specific sandbox deployment transactions only.
-WHY: Registry recording needs deployed code; funded settlement also needs the new
-Marketplace interface. Current compiled source is not current deployed bytecode.
-EXACT CONTRACTS: PaymentReceiptRegistry; optionally Marketplace + RoyaltySplitter
-for funded test checkout after separate migration review.
-OLD ADDRESSES: Listed above and in migration_inventory.json.
-NEW CONTRACTS TO DEPLOY: Registry with sandbox=true and separate recorder/admin
-addresses; new splitter/market only if the funded route is accepted.
-WHAT IS PRESERVED: KnowledgeAsset, token, existing NFT owners, existing contracts,
-purchase entitlements/counts, listings, auctions and refundable balances.
-ROLLBACK PLAN: Disable new record/settlement workers, preserve transaction
-checkpoints, restore the old active-market configuration, retain any newly used
-market as legacy for its purchasers and outstanding refunds. Never delete ledger
-rows or reassign the old splitter. Investigate pending signed jobs before restart.
-TEST EVIDENCE: 128 contract tests on the upgraded compiler, existing backend legacy
-entitlement checks and frontend old-market cancellation/auction/refund tests;
-database indexer/reorg and recorder restart tests. Interactive old/new coexistence
-is not yet provider/wallet verified.
+## Deployment preparation
 
-## Before switch
+Copy sandbox-deployment-addresses.example.json to sandbox-deployment-addresses.json
+and enter approved PUBLIC addresses. Admin, settlement and recorder must differ.
+From contracts, run:
+`node_modules/.bin/hardhat.cmd run scripts/deploy-trnsk-sandbox.ts --network polygonAmoy`
 
-Refresh the snapshot; finish/check historical backfill; list affected seller
-cancellations and pending refunds; compare old purchase counts; record constructor
-arguments, code hashes and role owners. Verify current/legacy wiring read-only.
-Sellers cancel old fixed listings before intentionally relisting. Keep finalization
-and refund actions targeting the original market. Pause/recovery behavior must be
-checked against the actual deployed version, not assumed from new source.
+Default execution verifies chain 80002, existing code/wiring and TRNSK metadata,
+then writes trnsk-deployment-plan.json without signing. Only AFTER explicit human
+approval may DKM_APPROVED_AMOY_DEPLOYMENT=true enable the deployment sequence:
+
+1. RoyaltySplitter(TRNSK, approved treasury, 500).
+2. Marketplace(existing KnowledgeAsset, new splitter, TRNSK).
+3. updateMarketplace(new market) on the NEW splitter only.
+4. PaymentReceiptRegistry(dedicated recorder, true).
+
+trnsk-deployment-manifest.json journals broadcasts, addresses, code hashes and
+post-deployment role/wiring checks. An existing journal blocks automatic retry.
+For partial deployment, inspect recorded receipts and recover; never delete it
+to blindly deploy again. Script execution does not activate application addresses.
+
+## Activation after approval
+
+Disable settlement/recording workers; reconcile pending signed transactions.
+Keep old persisted orders in their original denomination and market. Do not
+redirect pending orders to the new market or reinterpret their prices.
+Set the new current market in both frontend/backend, add the original market to
+BOTH legacy lists, configure new splitter/token/registry and copy ABI only from
+the exact approved compiled source. Re-run acceptance and deployed wiring checks.
+
+KnowledgeAsset.priceUSDC remains a 6-decimal reference. Sellers confirm TRNSK
+listing/reserve prices explicitly. Cancel old listings on the original market
+before relisting; the UI checks all markets. This is not an atomic cross-contract
+reservation. Old auctions/refunds/access continue targeting their original market.
+
+## Rollback
+
+Disable new workers; preserve signed checkpoints. Restore original active-market
+configuration. Retain any used new market in both legacy lists so its licenses
+and refunds survive. Never delete ledgers, entitlements or the manifest, or
+repoint the old splitter. Provider funding is not reversed by a config rollback.

@@ -55,7 +55,7 @@ class TransakTests(unittest.IsolatedAsyncioTestCase):
             import json
             body = json.loads(request.content)["widgetParams"]
             if body["productsAvailed"] == "SELL":
-                self.assertEqual(body["fiatCurrency"], "EUR")
+                self.assertIn(body["fiatCurrency"], ("EUR", "JPY"))
                 self.assertNotIn("walletAddress", body)
                 self.assertNotIn("network", body)
                 self.sessions += 1
@@ -140,10 +140,11 @@ class TransakTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_payout_session_uses_sell_and_no_forced_blockchain(self):
         url = await transak.create_session("0x" + "1" * 40, "127.0.0.1", payout_currency="EUR")
+        self.assertTrue(await transak.create_session("0x" + "1" * 40, "127.0.0.1", payout_currency="JPY"))
         self.assertTrue(url.startswith("https://global-stg.transak.com?"))
         with self.assertRaises(ValueError):
             await transak.create_session("0x" + "1" * 40, "127.0.0.1", payout_currency="INVALID")
-        self.assertEqual(self.sessions, 1)
+        self.assertEqual(self.sessions, 2)
 
     async def test_terminal_regression_and_late_capture_require_review(self):
         user = {"id":1,"wallet_address":"0x" + "1" * 40}

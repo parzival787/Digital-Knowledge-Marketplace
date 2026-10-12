@@ -7,6 +7,7 @@ type Receipt = {
   amount_paid: string | null; provider_fee: string | null; crypto_amount: string | null;
   transaction_hash: string | null; checked_at?: string;
   verification_state?: string; observed_status?: string; refresh_error?: string | null;
+  funding_state?: string; chain_delivery_state?: string; asset_token_id?: string;
 };
 export default function TransakOrders() {
   const [orders, setOrders] = useState<Receipt[]>([]);
@@ -42,6 +43,7 @@ export default function TransakOrders() {
     {orders.map(order => <article key={order.order_id} className="space-y-2 border-t pt-3">
       <p className="break-all">Order: {order.order_id}</p>
       <p>Provider status: {order.status}</p>
+      {order.funding_state && <p>Asset #{order.asset_token_id} funding: {order.funding_state.replaceAll("_", " ")}. Blockchain delivery: {order.chain_delivery_state?.replaceAll("_", " ")}. A separate marketplace purchase is required for access.</p>}
       {order.verification_state === "review_required" && <p role="alert" className="text-amber-800">Provider evidence conflicts with a previous result. Review required; last observed status: {order.observed_status}. Do not treat this as a completed marketplace payment.</p>}
       {order.refresh_error && <p role="status">{order.refresh_error}</p>}
       <p>Quoted amount: {order.fiat_amount ?? "Unavailable"} {order.fiat_currency}</p>

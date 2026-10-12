@@ -1,3 +1,12 @@
+## Superseding TRNSK update — 2026-10-12
+
+The 20-phase TRNSK brief supersedes earlier payment deployment plans below.
+Pre-deployment token generalization, bound BUY/SELL, runtime quotes, canonical
+delivery, dynamic settlement, migration checks and guarded deployment package are
+implemented and locally tested. Approval, role addresses, test funding and hosted/
+wallet E2E remain open. FINAL_STATUS.md and MASTER_TODO.md are the current gate
+list; older rows and counts below are historical, not proof of live completion.
+
 # DKM roadmap audit — updated 2026-10-11
 
 This maps the supplied 44-item roadmap to the current feature branch. “Implemented”

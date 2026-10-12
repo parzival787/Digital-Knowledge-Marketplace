@@ -113,6 +113,11 @@ async def setup_tables():
                 ADD COLUMN IF NOT EXISTS settlement_raw_tx TEXT
         """)
         await conn.execute("ALTER TABLE payment_orders ADD COLUMN IF NOT EXISTS user_id BIGINT")
+        await conn.execute("""ALTER TABLE payment_orders
+            ADD COLUMN IF NOT EXISTS payment_token TEXT,
+            ADD COLUMN IF NOT EXISTS payment_symbol TEXT,
+            ADD COLUMN IF NOT EXISTS payment_decimals INT,
+            ADD COLUMN IF NOT EXISTS payment_amount_base_units TEXT""")
         await conn.execute("""
             ALTER TABLE payment_orders
                 ADD COLUMN IF NOT EXISTS recovery_status TEXT CHECK (recovery_status IN ('REVIEW_REQUIRED', 'REFUNDED')),

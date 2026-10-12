@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checkListing, checkGas, confirmedReceipt } from "../lib/blockchain/purchaseSafety.ts";
+import { checkListing, checkUnlisted, checkGas, confirmedReceipt } from "../lib/blockchain/purchaseSafety.ts";
 
 const contract = { address: "0xmarket", abi: [] };
 const buyer = "0xbuyer";
+test("listing is blocked by any current or legacy active listing and failed reads", async()=>{
+  const markets=[contract,{address:"0xlegacy",abi:[]}];
+  await assert.rejects(checkUnlisted({getBlockNumber:async()=>11n,readContract:async args=>args.address==="0xlegacy"},markets,1n),/Cancel/);
+  await assert.rejects(checkUnlisted({getBlockNumber:async()=>11n,readContract:async()=>{throw new Error("RPC failed");}},markets,1n));
+  await checkUnlisted({getBlockNumber:async()=>11n,readContract:async()=>false},markets,1n);
+});
 function client() {
   const state = { listing: [1n, 5n, "0xseller", 0, true], active: true, purchased: false, id: 2n };
   return { state, getBlockNumber: async () => 11n,

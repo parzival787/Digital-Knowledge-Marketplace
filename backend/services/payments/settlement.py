@@ -29,9 +29,27 @@ SETTLEMENT_ABI = MARKETPLACE_ABI + [
     function_abi("buyAssetFor", ["uint256", "address", "uint256", "bytes32"], [], "nonpayable"),
 ]
 TOKEN_ABI = [
+    function_abi("decimals", [], ["uint8"]),
     function_abi("balanceOf", ["address"], ["uint256"]),
     function_abi("allowance", ["address", "address"], ["uint256"]),
 ]
+
+
+def order_amount(order):
+    # Existing persisted orders predate denomination fields and used whole MockUSDC.
+    amount = int(order.payment_amount_base_units) if order.payment_amount_base_units is not None else order.amount_usdc * 10**6
+    if not 0 < amount < 2**256:
+        raise ValueError("Invalid settlement amount")
+    return amount
+
+
+def verify_denomination(w3, market, order):
+    address = market.functions.usdc().call()
+    expected = order.payment_token or "0x0bd22C54F90E7309dd5e7e73270Ac72d4cD74719"
+    decimals = order.payment_decimals if order.payment_decimals is not None else 6
+    token = w3.eth.contract(address=address, abi=TOKEN_ABI)
+    if address.lower() != expected.lower() or token.functions.decimals().call() != decimals:
+        raise ValueError("Settlement denomination changed; operator review required")
 
 
 def connection():
@@ -57,11 +75,13 @@ def validate_checkout(order: PaymentOrder) -> dict:
         raise ValueError("This asset is inactive")
     listing_id = market.functions.tokenToListing(order.token_id).call()
     listing = market.functions.listings(listing_id).call()
-    amount = order.amount_usdc * 1_000_000
+    from .market_profiles import market_profile
+    profile = market_profile(w3, market.address, registry.address, market.address)
+    amount = listing[1]
     if not listing_id or not listing[4] or listing[3] != 0 or listing[0] != order.token_id:
         raise ValueError("This asset is not available at a fixed price")
-    if listing[1] != amount:
-        raise ValueError("Database and listing prices differ; the seller must reconcile them before fiat checkout")
+    if not 0 < amount < 2**256:
+        raise ValueError("Invalid listing price")
     if listing[2].lower() == order.buyer_address.lower():
         raise ValueError("Sellers cannot buy their own asset")
     from services.blockchain import has_purchased
@@ -69,17 +89,20 @@ def validate_checkout(order: PaymentOrder) -> dict:
         raise ValueError("This wallet already has purchase entitlement")
     token = w3.eth.contract(address=market.functions.usdc().call(), abi=TOKEN_ABI)
     if token.functions.balanceOf(account.address).call() < amount:
-        raise ValueError("Settlement wallet has insufficient test USDC")
+        raise ValueError("Settlement wallet has insufficient marketplace payment tokens")
     if token.functions.allowance(account.address, market.address).call() < amount:
-        raise ValueError("Settlement wallet must approve test USDC before enabling checkout")
-    return {"listing_id": listing_id, "marketplace_address": market.address, "chain_id": 80002}
+        raise ValueError("Settlement wallet must approve the marketplace payment token before enabling checkout")
+    return {"listing_id": listing_id, "marketplace_address": market.address, "chain_id": 80002,
+            "payment_token": profile["token_address"], "payment_symbol": profile["symbol"],
+            "payment_decimals": profile["decimals"], "payment_amount_base_units": str(amount)}
 
 
 def prepare(order: PaymentOrder):
     w3, account, market = connection()
     if order.chain_id != 80002 or order.marketplace_address != market.address:
         raise ValueError("Order belongs to a different deployment; operator review required")
-    args = [order.listing_id, order.buyer_address, order.amount_usdc * 1_000_000, Web3.keccak(text=order.order_id)]
+    verify_denomination(w3, market, order)
+    args = [order.listing_id, order.buyer_address, order_amount(order), Web3.keccak(text=order.order_id)]
     tx = market.functions.buyAssetFor(*args).build_transaction({
         "from": account.address, "chainId": 80002,
         "nonce": w3.eth.get_transaction_count(account.address, "pending"),
@@ -123,7 +146,7 @@ def broadcast_and_verify(order: PaymentOrder, raw: str):
     if not confirmed_receipt(w3, tx_hash, receipt):
         return "pending"
     expected_data = market.encode_abi("buyAssetFor", args=[
-        order.listing_id, order.buyer_address, order.amount_usdc * 1_000_000, Web3.keccak(text=order.order_id)
+        order.listing_id, order.buyer_address, order_amount(order), Web3.keccak(text=order.order_id)
     ])
     tx = w3.eth.get_transaction(tx_hash)
     if (tx["to"] != market.address or tx["from"] != account.address

@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import APIRouter, Depends
 from web3 import Web3
@@ -38,6 +39,9 @@ async def setup_indexer():
             CREATE INDEX IF NOT EXISTS market_events_args ON market_events USING GIN(args);
             ALTER TABLE market_events ADD COLUMN IF NOT EXISTS recording_evidence_id UUID;
             ALTER TABLE market_events ADD COLUMN IF NOT EXISTS recording_checked_at TIMESTAMPTZ;
+            ALTER TABLE chain_sync ADD COLUMN IF NOT EXISTS page_size INT NOT NULL DEFAULT 10;
+            ALTER TABLE chain_sync ADD COLUMN IF NOT EXISTS failures INT NOT NULL DEFAULT 0;
+            ALTER TABLE chain_sync ADD COLUMN IF NOT EXISTS retry_after TIMESTAMPTZ;
         """)
     finally: await conn.close()
 
@@ -144,6 +148,7 @@ async def sync_market(address):
             await conn.execute('INSERT INTO chain_sync(market,deployment_block,next_block) VALUES ($1,$2,$2)',address,start)
             cursor=await conn.fetchrow('SELECT * FROM chain_sync WHERE market=$1',address)
         if cursor['state']=='review_required': return
+        if cursor['retry_after'] and cursor['retry_after'] > datetime.now(timezone.utc): return
         start=cursor['next_block']
         if cursor['checkpoint_hash']:
             actual=await asyncio.to_thread(w3.eth.get_block,start-1)
@@ -151,7 +156,9 @@ async def sync_market(address):
                 await conn.execute("UPDATE chain_sync SET state='review_required',error='Canonical checkpoint changed; rebuild history before using totals' WHERE market=$1",address)
                 return
         if start>head: return
-        end=min(head,start+max(1,min(2000,int(os.getenv('RPC_LOG_PAGE_SIZE','10'))))-1)
+        maximum=max(1,min(10000,int(os.getenv('RPC_LOG_PAGE_SIZE','2000'))))
+        page_size=max(1,min(maximum,cursor['page_size']))
+        end=min(head,start+page_size-1)
         rows,checkpoint=await asyncio.to_thread(fetch_page,address,start,end)
         async with conn.transaction():
             for row in rows:
@@ -165,9 +172,12 @@ async def sync_market(address):
                 await conn.execute('INSERT INTO market_events(market,tx_hash,log_index,block_number,block_hash,kind,args,accounting) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING',address,
                     row['tx_hash'],row['log_index'],row['block_number'],row['block_hash'],row['kind'],json.dumps(row['args']),
                     json.dumps(row['accounting']) if row['accounting'] else None)
-            await conn.execute("UPDATE chain_sync SET next_block=$2,checkpoint_hash=$3,state=$4,error=NULL,updated_at=NOW() WHERE market=$1",address,end+1,checkpoint,'synced' if end==head else 'backfilling')
+            await conn.execute("UPDATE chain_sync SET next_block=$2,checkpoint_hash=$3,state=$4,error=NULL,updated_at=NOW(),page_size=$5,failures=0,retry_after=NULL WHERE market=$1",address,end+1,checkpoint,'synced' if end==head else 'backfilling',min(maximum,page_size*2))
     except Exception:
-        await conn.execute("UPDATE chain_sync SET error='Indexer unavailable; checkpoint preserved',updated_at=NOW() WHERE market=$1",address)
+        await conn.execute("""UPDATE chain_sync SET error='Indexer unavailable; checkpoint preserved',updated_at=NOW(),
+            page_size=GREATEST(1,page_size/2), failures=LEAST(failures+1,10),
+            retry_after=NOW()+make_interval(secs=>LEAST(300,30*power(2,LEAST(failures,4)))::double precision)
+            WHERE market=$1""",address)
         raise
     finally: await conn.close()
 
@@ -179,7 +189,7 @@ async def rebuild_market(address):
         async with conn.transaction():
             await conn.execute('SELECT pg_advisory_xact_lock(hashtext($1),7323)',address.lower())
             await conn.execute('DELETE FROM market_events WHERE market=$1',address.lower())
-            await conn.execute("UPDATE chain_sync SET next_block=deployment_block,checkpoint_hash=NULL,state='backfilling',error=NULL WHERE market=$1",address.lower())
+            await conn.execute("UPDATE chain_sync SET next_block=deployment_block,checkpoint_hash=NULL,state='backfilling',error=NULL,failures=0,retry_after=NULL WHERE market=$1",address.lower())
     finally: await conn.close()
 
 

@@ -26,7 +26,7 @@ export default function TransakFunding() {
   return <section className="space-y-3 rounded-xl border p-5" aria-labelledby="transak-title">
     <h2 id="transak-title" className="text-xl font-semibold">Try Transak test checkout</h2>
     <p>Test the provider’s supported payment methods and review its fees before confirming. UPI is not verified for this sandbox. Use only Transak’s documented test payment details.</p>
-    <p className="rounded bg-amber-50 p-3">Sandbox only: selecting USDC delivers Transak’s TRNSK test token, not this marketplace’s MockUSDC. This test does not buy an asset or grant download access.</p>
+    <p className="rounded bg-amber-50 p-3">Sandbox only: selecting USDC on Polygon delivers TRNSK on Amoy. TRNSK can fund listings that accept TRNSK; legacy MockUSDC listings require MockUSDC. For a listing-bound quote, start funding from that asset’s marketplace card. Funding does not buy an asset or grant access.</p>
     <p>Your verified account wallet is the destination. DKM adds no buyer platform fee; its marketplace fee is deducted from seller proceeds.</p>
     {configured === false && <p role="status">Add the Transak staging credentials to the backend configuration and restart the backend to enable this test.</p>}
     {error && <p role="alert" className="text-red-700">{error}</p>}

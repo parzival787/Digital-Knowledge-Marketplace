@@ -6,25 +6,23 @@ from web3 import Web3
 from . import transak
 from .razorpay_provider import RazorpayProvider
 from .settlement import SETTLEMENT_ABI, function_abi
+from .market_profiles import market_profile
+from web3.middleware import ExtraDataToPOAMiddleware
 
 
 def chain_routes():
     """Read deployed wiring; never infer deployed features from local artifacts."""
     w3 = Web3(Web3.HTTPProvider(os.environ["BLOCKCHAIN_RPC_URL"], request_kwargs={"timeout": 5}, exception_retry_configuration=None))
+    w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
     if w3.eth.chain_id != 80002:
         raise ValueError("Demo requires Amoy")
     abi = SETTLEMENT_ABI + [function_abi("paused", [], ["bool"])]
     addresses = [os.environ["MARKETPLACE_ADDRESS"]] + os.getenv("LEGACY_MARKETPLACE_ADDRESSES", "").split(",")
     markets = []
+    block = w3.eth.block_number
     for value in dict.fromkeys(a.strip().lower() for a in addresses if a.strip()):
-        market = w3.eth.contract(address=Web3.to_checksum_address(value), abi=abi)
-        if market.functions.knowledgeAsset().call().lower() != os.environ["KNOWLEDGE_ASSET_ADDRESS"].lower():
-            raise ValueError("Registry mismatch")
-        token = market.functions.usdc().call()
-        if not w3.eth.get_code(token):
-            raise ValueError("Missing token")
-        markets.append({"address": market.address, "token_address": token,
-                        "paused": market.functions.paused().call()})
+        markets.append(market_profile(w3, value, os.environ["KNOWLEDGE_ASSET_ADDRESS"],
+                                      os.environ["MARKETPLACE_ADDRESS"], block))
     funded = False
     if os.getenv("SETTLEMENT_ENABLED") == "true" and os.getenv("SETTLEMENT_PRIVATE_KEY"):
         # Only probe the feature. Per-listing validation still checks funds/allowance.
@@ -66,7 +64,7 @@ def payment_capabilities():
         "auction": route(chain_ready, "available" if chain_ready else "unavailable",
             "Use verified marketplace auctions. Paused markets may still allow refunds/finalization; new bids are checked separately.", "auction", chain_id=80002),
         "transak_buy": route(transak_ready, "sandbox" if transak_ready else "configuration_required",
-            "Hosted sandbox only. USDC selection delivers TRNSK, not DKM MockUSDC. Funding never purchases an asset.", "funding",
+            "USDC on Polygon staging delivers TRNSK on Amoy. Start from a TRNSK listing for a bound funding quote; legacy MockUSDC listings require their original token. Funding never purchases an asset.", "funding",
             selected_token="USDC", delivered_token="TRNSK", provider_network="polygon", grants_access=False),
         "transak_sell": route(transak_ready, "sandbox" if transak_ready else "configuration_required",
             "Hosted sandbox entry only. SELL enablement and actual payout eligibility are determined by the provider.", "payout",
@@ -75,7 +73,7 @@ def payment_capabilities():
             "Test checkout; listing and settlement funding are checked before creating an order." if razorpay_ready else
             "Test checkout requires provider credentials, a test rate and a deployed funded-settlement interface.", "purchase"),
         "upi": route(False, "unverified", "Actual UPI funding and payout are not verified for this demo. Razorpay test simulations are separate.", "funding"),
-        "crypto_route": route(False, "unsupported", "No executable swap/bridge route supports this Amoy MockUSDC deployment.", "funding"),
+        "crypto_route": route(False, "unsupported", "No executable swap/bridge route supports this Amoy test-token deployment.", "funding"),
         "receipt_registry": route(False, "configuration_required", "Durable audit recorder is implemented; registry deployment and recorder activation require review. Never an access authority.", "audit"),
     }
     return {"version": 1, "environment": "local_demo", "chain_id": 80002,

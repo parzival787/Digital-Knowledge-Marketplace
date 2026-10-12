@@ -5,9 +5,11 @@ import { useAuth } from "@/providers/AuthProvider";
 import Script from "next/script";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { formatUnits } from "viem";
 
 type Order = {
   order_id: string; status: string; amount_usdc: number; provider_order_id: string | null;
+  payment_token: string | null; payment_symbol: string | null; payment_decimals: number | null; payment_amount_base_units: string | null;
   fiat_amount: number | null; fiat_currency: string | null; exchange_rate: string | null;
   checkout_key: string | null; settlement_tx_hash: string | null; error: string | null;
   provider_payment_id: string | null; recovery_status: string | null; refund_id: string | null;
@@ -84,6 +86,8 @@ export default function Web2Checkout({ tokenId, buyer, canStart }: { tokenId: bi
       }
       if (order && (order.fiat_amount !== value.fiat_amount || order.fiat_currency !== value.fiat_currency
           || order.amount_usdc !== value.amount_usdc || order.exchange_rate !== value.exchange_rate
+          || order.payment_token !== value.payment_token || order.payment_decimals !== value.payment_decimals
+          || order.payment_amount_base_units !== value.payment_amount_base_units
           || order.provider_order_id !== value.provider_order_id || order.checkout_key !== value.checkout_key)) {
         throw new Error("Payment details changed. Review the updated total before continuing.");
       }
@@ -118,15 +122,15 @@ export default function Web2Checkout({ tokenId, buyer, canStart }: { tokenId: bi
   return <section className="mt-4 space-y-3 rounded border p-3" aria-label="UPI and card checkout">
     {capability?.fiat_configured && <Script src="https://checkout.razorpay.com/v1/checkout.js" onReady={() => setReady(true)} onError={() => setError("Unable to load checkout. Check your connection.")} />}
     <h3 className="font-semibold">UPI / Card — Test mode</h3>
-    <p className="text-sm text-slate-600">Razorpay test checkout. No real INR is charged; settlement uses test USDC.</p>
+    <p className="text-sm text-slate-600">Razorpay test-mode prefunded settlement. No real INR is charged. A prefunded settlement wallet pays the listing token; no currency conversion takes place.</p>
     <p>{capability?.fiat_message || "Checking payment availability…"}</p>
     <label className="block">Payment method <select className="rounded border p-2" value={method} onChange={e => setMethod(e.target.value)} disabled={!!order}>
       <option value="upi">UPI</option><option value="card">Card</option>
     </select></label>
     <p className="text-sm">DKM’s platform fee is deducted from the seller’s asset proceeds. It is not added to your bill.</p>
     {!!order?.fiat_amount && <div className="space-y-2 rounded bg-slate-50 p-3" aria-label="Test payment breakdown">
-      <p>Asset price: {order.amount_usdc} USDC</p>
-      <p>Test exchange rate: ₹{order.exchange_rate} per USDC</p>
+      <p>Settlement amount: {order.payment_amount_base_units != null ? formatUnits(BigInt(order.payment_amount_base_units), order.payment_decimals ?? 6) : order.amount_usdc} {order.payment_symbol ?? "MockUSDC"}</p>
+      <p>Test pricing rate: ₹{order.exchange_rate} per {order.payment_symbol ?? "MockUSDC"} (simulation).</p>
       <p>Additional DKM fee charged to you: ₹0</p>
       <p>External conversion, payment and network charges are not quoted in this test checkout. Production charges remain unavailable.</p>
       <p className="font-semibold">Total test payment: {(order.fiat_amount / 100).toFixed(2)} {order.fiat_currency}</p>

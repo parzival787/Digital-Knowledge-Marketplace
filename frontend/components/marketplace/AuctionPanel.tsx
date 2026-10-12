@@ -6,11 +6,12 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAccount, usePublicClient, useReadContract, useSwitchChain, useWriteContract } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
-import { formatUnits, parseUnits } from "viem";
+import { formatUnits } from "viem";
 import { polygonAmoy } from "viem/chains";
-import { marketplaceContract, mockUSDCContract } from "@/lib/blockchain/contracts";
+import { marketplaceContract, entitlementMarketplaceContracts } from "@/lib/blockchain/contracts";
+import { paymentToken, paymentAmount } from "@/lib/blockchain/paymentToken";
 
-import { checkGas, confirmedReceipt, PurchaseCheckError } from "@/lib/blockchain/purchaseSafety";
+import { checkGas, checkUnlisted, confirmedReceipt, PurchaseCheckError } from "@/lib/blockchain/purchaseSafety";
 
 type Auction = readonly [bigint, bigint, bigint, `0x${string}`, `0x${string}`, boolean, boolean, number, number];
 
@@ -19,6 +20,9 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price, mar
 }) {
   const market = { ...marketplaceContract, address: marketAddress ?? marketplaceContract.address };
   const paymentCapabilities = usePaymentCapabilities();
+  const profile = paymentCapabilities.data?.markets.find(value => value.address.toLowerCase() === market.address.toLowerCase());
+  const mockUSDCContract = paymentToken(profile);
+  const display = (value: bigint) => profile ? `${formatUnits(value, profile.decimals)} ${profile.symbol}` : "Checking token…";
   const auctionAvailable = !paymentCapabilities.isError && marketRouteAvailable(paymentCapabilities.data, "auction", market.address, mockUSDCContract.address);
   const newPaymentsAvailable = auctionAvailable && !paymentCapabilities.data?.markets.find(value => value.address.toLowerCase() === market.address.toLowerCase())?.paused;
   const verified = useVerifiedWallet();
@@ -41,6 +45,8 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price, mar
   const [busy, setBusy] = useState(false);
   const [transactionHash, setTransactionHash] = useState<`0x${string}` | null>(null);
   const [now, setNow] = useState(0);
+  const [reserve, setReserve] = useState(formatUnits(price, 6));
+  const [reserveConfirmed, setReserveConfirmed] = useState(false);
   useEffect(() => { if (auctionId) setLastAuctionId(auctionId); }, [auctionId]);
   useEffect(() => {
     setNow(Math.floor(Date.now() / 1000));
@@ -57,7 +63,7 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price, mar
 
   async function transact(action: "bid" | "create" | "end" | "refund") {
     setError("");
-    if (!auctionAvailable) { setError("Auction deployment could not be verified. Retry availability checks before signing."); return; }
+    if (!auctionAvailable || !profile) { setError("Auction deployment could not be verified. Retry availability checks before signing."); return; }
     if ((action === "bid" || action === "create") && !newPaymentsAvailable) { setError("Marketplace is paused for new bids and auctions."); return; }
     if (!verified) { setError("Log in and verify your connected wallet in Account first."); return; }
     if (!address || !client) { setError("Connect your wallet first."); return; }
@@ -73,20 +79,26 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price, mar
       }
       setStatus("Confirm in your wallet…");
       if (action === "bid") {
-        if (!/^\d+(\.\d{1,6})?$/.test(bid)) throw new PurchaseCheckError("Enter a USDC amount with up to six decimal places.");
-        const amount = parseUnits(bid, 6);
-        if (amount < minimum) throw new PurchaseCheckError(`Minimum bid is ${formatUnits(minimum, 6)} USDC.`);
+        let amount: bigint;
+        try { amount = paymentAmount(bid, profile.decimals); }
+        catch (error) { throw new PurchaseCheckError((error as Error).message); }
+        if (amount < minimum) throw new PurchaseCheckError(`Minimum bid is ${display(minimum)}.`);
         const balance = await client.readContract({ ...mockUSDCContract, functionName: "balanceOf", args: [address] }) as bigint;
-        if (balance < amount) throw new PurchaseCheckError("Insufficient USDC balance for this bid.");
+        if (balance < amount) throw new PurchaseCheckError(`Insufficient ${profile.symbol} balance for this bid.`);
         const allowance = await client.readContract({ ...mockUSDCContract, functionName: "allowance", args: [address, market.address] }) as bigint;
-        if (allowance < amount) { setStatus("Approve USDC in your wallet…"); await send(mockUSDCContract, "approve", [market.address, amount]); }
+        if (allowance < amount) { setStatus(`Approve ${profile.symbol} in your wallet…`); await send(mockUSDCContract, "approve", [market.address, amount]); }
         setStatus("Confirm your bid in your wallet…");
         await send(market, "placeBid", [resolvedId, amount]);
       } else if (action === "create") {
+        if (!reserveConfirmed) throw new PurchaseCheckError("Confirm the reserve price and token first.");
+        let reserveAmount: bigint;
+        try { reserveAmount = paymentAmount(reserve, profile.decimals); }
+        catch (error) { throw new PurchaseCheckError((error as Error).message); }
+        await checkUnlisted(client, entitlementMarketplaceContracts, tokenId);
         const duration = Number(hours);
         if (!Number.isInteger(duration) || duration < 1 || duration > 720) throw new PurchaseCheckError("Choose a duration from 1 to 720 hours.");
         const block = await client.getBlock();
-        await send(market, "createAuction", [tokenId, price, block.timestamp, block.timestamp + BigInt(duration * 3600), []]);
+        await send(market, "createAuction", [tokenId, reserveAmount, block.timestamp, block.timestamp + BigInt(duration * 3600), []]);
       } else {
         await send(market, action === "end" ? "endAuction" : "withdrawRefund", action === "end" ? [resolvedId] : []);
       }
@@ -111,24 +123,26 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price, mar
     {!!resolvedId && !auction && !isError && <p>Loading auction…</p>}
     {auction && <>
       <Link className="block underline" href={`/marketplace#asset-${auction[0]}`}>View asset #{auction[0].toString()}</Link>
-      <p>Starting price: {formatUnits(auction[1], 6)} USDC</p>
-      <p>{auction[2] ? `Highest bid: ${formatUnits(auction[2], 6)} USDC` : "No bids yet"}</p>
+      <p>Starting price: {display(auction[1])}</p>
+      <p>{auction[2] ? `Highest bid: ${display(auction[2])}` : "No bids yet"}</p>
       {auction[2] > 0n && <p className="break-all">{auction[6] ? "Winner" : "Highest bidder"}: {auction[3]} {winner && "(you)"}</p>}
       <p>Ends: {new Date(Number(auction[8]) * 1000).toLocaleString()}</p>
       <p>{auction[6] ? "Auction completed" : ended ? "Auction ended — ready to finalize" : !started ? "Bidding has not started" : `Time remaining: ${Math.floor(remaining / 3600)}h ${Math.floor(remaining % 3600 / 60)}m ${remaining % 60}s`}</p>
       {auction[5] && !ended && started && !seller && <>
-        <label className="block">Your bid (USDC)<input className="mt-1 w-full rounded border p-2" inputMode="decimal" value={bid} onChange={e => setBid(e.target.value)} placeholder={formatUnits(minimum, 6)} /></label>
+        <label className="block">Your bid ({profile?.symbol})<input className="mt-1 w-full rounded border p-2" inputMode="decimal" value={bid} onChange={e => setBid(e.target.value)} placeholder={profile ? formatUnits(minimum, profile.decimals) : ""} /></label>
         <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy || !address || !newPaymentsAvailable} onClick={() => transact("bid")}>Place bid</button>
       </>}
       {auction[5] && ended && <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy || !address || !auctionAvailable} onClick={() => transact("end")}>Finalize auction</button>}
     </>}
     {!auctionId && canCreate && <>
-      <p>Starting price: {formatUnits(price, 6)} USDC. No co-author royalties.</p>
+      <p>Reference price: {formatUnits(price, 6)} USDC. No co-author royalties.</p>
+      <label className="block">Reserve price ({profile?.symbol})<input className="w-full rounded border p-2" inputMode="decimal" value={reserve} onChange={event => { setReserve(event.target.value); setReserveConfirmed(false); }} /></label>
+      <label className="block"><input type="checkbox" checked={reserveConfirmed} onChange={event => setReserveConfirmed(event.target.checked)} /> I confirm {reserve} {profile?.symbol} as the reserve price.</label>
       <label className="block">Duration (hours)<input className="mt-1 w-full rounded border p-2" type="number" min="1" max="720" value={hours} onChange={e => setHours(e.target.value)} /></label>
-      <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy || !newPaymentsAvailable} onClick={() => transact("create")}>Create auction</button>
+      <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy || !newPaymentsAvailable || !reserveConfirmed} onClick={() => transact("create")}>Create auction</button>
     </>}
     {(refund as bigint | undefined ?? 0n) > 0n && <>
-      <p>You have {formatUnits(refund as bigint, 6)} USDC in refundable bids across the marketplace.</p>
+      <p>You have {display(refund as bigint)} in refundable bids across the marketplace.</p>
       <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy || !auctionAvailable} onClick={() => transact("refund")}>Withdraw bid refund</button>
     </>}
     {!address && <p>Connect your wallet to bid or finalize.</p>}

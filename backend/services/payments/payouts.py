@@ -35,6 +35,11 @@ async def setup_payouts():
                 observation_digest TEXT NOT NULL, operator TEXT NOT NULL DEFAULT SESSION_USER, reason TEXT NOT NULL,
                 previous JSONB, accepted JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
+            ALTER TABLE seller_payouts ADD COLUMN IF NOT EXISTS sale_reference TEXT;
+            ALTER TABLE seller_payouts ADD COLUMN IF NOT EXISTS sale_terms JSONB;
+            ALTER TABLE seller_payouts ADD COLUMN IF NOT EXISTS quote JSONB;
+            CREATE UNIQUE INDEX IF NOT EXISTS payout_sale_reference ON seller_payouts(sale_reference)
+                WHERE sale_reference IS NOT NULL;
         """)
     finally:
         await conn.close()
@@ -67,6 +72,14 @@ def verified_sell(data, payout, order_id):
         raise ValueError('SELL account references do not match')
     result = transak.normalized_order(data, str(order_id))
     result['direction'] = 'SELL'
+    if payout.get('sale_terms'):
+        from .market_profiles import parse_units
+        terms = json.loads(payout['sale_terms'])
+        if (data.get('network') != 'polygon' or data.get('cryptoCurrency') != 'USDC'
+                or result['fiat_currency'] != payout['currency']
+                or result['crypto_amount'] is None or parse_units(result['crypto_amount'],18) != int(terms['amount_base_units'])):
+            raise ValueError('SELL token, network, amount or currency mismatch')
+        result.update(requested_crypto='USDC', actual_payment_token=terms['token'], expected_amount_base_units=terms['amount_base_units'])
     # No wallet comparison: SELL walletAddress is a provider deposit destination.
     if result['status'] == 'COMPLETED' and (result['fiat_amount'] is None or result['crypto_amount'] is None):
         raise ValueError('Completed payout amounts missing')
@@ -88,7 +101,16 @@ async def refresh_payout(payout_id, order_id, user_id):
                 token = await transak.access_token(conn, client, key, secret, fingerprint, token_row)
                 data = await transak.provider_json(client, 'https://api-stg.transak.com/partners/api/v2/order/' + str(order_id),
                     method='GET', headers={'access-token':token, 'x-api-key':key})
-            observed = verified_sell(data, payout, order_id)
+            try:
+                observed = verified_sell(data, payout, order_id)
+            except ValueError:
+                if not payout['provider_order']:
+                    raise
+                await conn.execute("UPDATE seller_payouts SET state='review_required',error='Saved provider order no longer matches payout binding',checked_at=NOW() WHERE id=$1",payout['id'])
+                return {'state':'review_required','receipt':json.loads(payout['receipt']) if payout['receipt'] else None,'grants_access':False}
+            if payout.get('sale_terms'):
+                from .sale_payouts import outgoing_delivery
+                observed['chain_delivery'] = await outgoing_delivery(data, observed, json.loads(payout['sale_terms']))
             previous = json.loads(payout['receipt']) if payout['receipt'] else None
             receipt = transak.reconcile_receipt(previous, observed)
             conflict = (payout['state'] == 'review_required' or observed['fiat_currency'] != payout['currency']
@@ -165,7 +187,7 @@ async def history(user=Depends(current_user)):
     try:
         rows = await conn.fetch('SELECT * FROM seller_payouts WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100', user['id'])
         return {'payouts':[{'id':str(r['id']), 'currency':r['currency'], 'order_id':str(r['provider_order']) if r['provider_order'] else None,
-            'state':r['state'], 'receipt':json.loads(r['receipt']) if r['receipt'] else None,
+            'state':r['state'], 'sale_reference':r['sale_reference'], 'receipt':json.loads(r['receipt']) if r['receipt'] else None,
             'error':r['error'], 'checked_at':r['checked_at'].isoformat() if r['checked_at'] else None} for r in rows]}
     finally:
         await conn.close()

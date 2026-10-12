@@ -5,6 +5,14 @@ type Client = Pick<PublicClient, "readContract" | "getBlockNumber" | "getBalance
 
 export class PurchaseCheckError extends Error {}
 
+export async function checkUnlisted(client: Client, markets: readonly Contract[], tokenId: bigint) {
+  const blockNumber = await client.getBlockNumber({ cacheTime: 0 });
+  for (const market of markets) {
+    if (await client.readContract({ ...market, functionName: "isListed", args: [tokenId], blockNumber }))
+      throw new PurchaseCheckError("Cancel the existing listing or finish its auction before listing in another marketplace.");
+  }
+}
+
 export async function checkListing(client: Client, market: Contract, registry: Contract, token: bigint, buyer: Address, expectedId: bigint, expectedPrice: bigint, legacyMarkets: readonly Contract[] = []) {
   const blockNumber = await client.getBlockNumber({ cacheTime: 0 });
   const id = await client.readContract({ ...market, functionName: "tokenToListing", args: [token], blockNumber }) as bigint;

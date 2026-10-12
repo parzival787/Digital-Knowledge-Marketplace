@@ -40,7 +40,8 @@ async def queue_indexed_sales():
                     continue
                 if (Web3.to_hex(Web3.keccak(text=order['order_id']))!=args['funding_reference']
                         or order['token_id']!=terms['tokenId'] or order['buyer_address'].lower()!=terms['buyer'].lower()
-                        or order['amount_usdc']*1_000_000!=terms['paymentAmount'] or order['fiat_currency']!='INR'):
+                        or int(order['payment_amount_base_units'] or order['amount_usdc']*1_000_000)!=terms['paymentAmount'] or order['fiat_currency']!='INR'
+                        or (order['payment_token'] or '0x0bd22C54F90E7309dd5e7e73270Ac72d4cD74719').lower()!=accounting['token'].lower()):
                     raise ValueError('Funded order does not match chain sale')
                 await verify_saved_capture(order)
                 provider='razorpay_test';reference=order['provider_payment_id']

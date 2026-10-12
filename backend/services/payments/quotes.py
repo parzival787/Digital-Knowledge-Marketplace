@@ -11,6 +11,7 @@ from services.auth import wallet_user, throttle
 from services.pgvector_client import get_conn
 from services import blockchain
 from .settlement import SETTLEMENT_ABI, function_abi
+from .market_profiles import market_profile
 
 router = APIRouter(prefix="/api/purchase-quotes", tags=["Purchase review"])
 RECIPIENTS_ABI = {"type": "function", "name": "getListingRecipients", "stateMutability": "view",
@@ -69,18 +70,15 @@ def purchase_terms(token_id, buyer):
         raise ValueError("Listing unavailable")
     if any(read(old.functions.hasPurchased(token_id, buyer)) for old in blockchain.entitlement_markets()):
         raise ValueError("Existing entitlement")
-    token = read(market.functions.usdc())
-    erc20 = w3.eth.contract(address=token, abi=[function_abi("decimals", [], ["uint8"])])
-    decimals = read(erc20.functions.decimals())
-    if decimals != 6:
-        raise ValueError("Unsupported payment token decimals")
+    profile = market_profile(w3, market.address, registry.address, market.address, block)
+    token, decimals = profile["token_address"], profile["decimals"]
     splitter_address = read(market.functions.royaltySplitter())
     splitter = w3.eth.contract(address=splitter_address, abi=[function_abi("platformFeeBps", [], ["uint16"])])
     amounts = accounting(listing[1], read(splitter.functions.platformFeeBps()), read(market.functions.getListingRecipients(listing_id)))
     return {"route": "fixed_price", "chain_id": 80002, "marketplace": market.address,
         "asset_contract": registry.address, "token_id": str(token_id), "listing_id": str(listing_id),
         "buyer": buyer, "seller": listing[2], "payment_token": token, "decimals": decimals,
-        "splitter": splitter_address, **amounts,
+        "symbol": profile["symbol"], "splitter": splitter_address, **amounts,
         "funding_amount": None, "provider_fee": None, "fx_spread": None,
         "network_fee": None, "source_gas": None, "payout_quote": None,
         "external_cost_notice": "No funding or payout quote is included. Wallet gas is additional and reviewed before signing.",

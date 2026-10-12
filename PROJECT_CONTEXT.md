@@ -1,5 +1,32 @@
 # DKM continuation — 2026-09-30
 
+## Active TRNSK continuation — 2026-10-12 (pre-deployment checks passed)
+
+Attachment deb8915c-babc-49f8-a601-9933c2166191 supersedes the older payment plan.
+Starting HEAD 83e8ea2 and existing draft PR #1 were verified. Continue the same
+branch; no deployment, new PR, merge, mainnet, real payments, or research reruns.
+Read-only Amoy verification passed for official TRNSK (18 decimals); see
+transak_token_evidence.json. Runtime Transak coverage and a public staging quote
+also passed; see transak_coverage_evidence.json. This lookup offered USD/EUR card
+routes, not INR/UPI. Provider eligibility and actual delivery remain separate.
+
+Uncommitted implementation now includes per-market denomination profiles, exact
+amount parsing, dynamic listing/auction amounts and explicit seller price review,
+persisted Razorpay token amounts with legacy MockUSDC compatibility, separate
+history totals, adaptive persistent index pages, runtime Transak discovery/quotes,
+asset-bound BUY sessions and independent canonical TRNSK delivery verification.
+SELL sale binding, guarded deployment preparation, 18-decimal contract tests,
+delivery/conflict regressions, browser auth-shell verification and migration/docs
+are now implemented. Consolidated acceptance passed 82 backend, 15 frontend,
+production build, 129 contracts and typecheck; the canonical sale test is included.
+Existing contracts/active addresses are unchanged. Migration refreshed at block
+49969644: five listings, zero auctions. Remaining gates: explicit deployment
+approval plus public roles, test funding, hosted/wallet E2E, Google configuration
+if required. See HUMAN_ACTION_REQUIRED.md. Settlement/recorder keys absent and
+workers disabled; CONTENT_MASTER_KEY present. History remains incomplete, with
+adaptive retry preserving checkpoints. Preserve unrelated llm_enrichment.py and
+untracked user files. No research rerun, public deployment or real money used.
+
 ## Current continuation (2026-10-11; supersedes stale blocker notes below)
 
 Current autonomous brief: attachment 64230ff7-b5da-4813-a67f-d7d2e04bdb40, continuing

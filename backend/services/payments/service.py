@@ -51,18 +51,24 @@ class PaymentService:
             if isinstance(provider, RazorpayProvider):
                 from .settlement import validate_checkout
                 context = await asyncio.to_thread(validate_checkout, order)
-                order = order.model_copy(update={**context, **provider.quote(amount)})
+                from decimal import Decimal, localcontext
+                with localcontext() as ctx:
+                    ctx.prec = 100
+                    token_amount = Decimal(context["payment_amount_base_units"]) / Decimal(10)**context["payment_decimals"]
+                    order = order.model_copy(update={**context, **provider.quote(token_amount)})
             # Save the identity before contacting a provider so failures leave
             # an audit record instead of silently losing the order.
             await conn.execute("""
                 INSERT INTO payment_orders
                     (order_id, token_id, buyer_address, amount_usdc, payment_method, status,
-                     fiat_currency, fiat_amount, exchange_rate, checkout_key, listing_id, marketplace_address, chain_id, user_id)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                     fiat_currency, fiat_amount, exchange_rate, checkout_key, listing_id, marketplace_address, chain_id, user_id,
+                     payment_token, payment_symbol, payment_decimals, payment_amount_base_units)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
             """, order.order_id, order.token_id, order.buyer_address,
                 order.amount_usdc, order.payment_method.value, order.status.value,
                 order.fiat_currency, order.fiat_amount, order.exchange_rate, order.checkout_key,
-                order.listing_id, order.marketplace_address, order.chain_id, user_id)
+                order.listing_id, order.marketplace_address, order.chain_id, user_id,
+                order.payment_token, order.payment_symbol, order.payment_decimals, order.payment_amount_base_units)
             try:
                 result = await provider.create_payment(order)
                 provider_id = result.get("provider_order_id")

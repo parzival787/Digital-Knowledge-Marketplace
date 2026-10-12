@@ -6,6 +6,8 @@ import { api, downloadAsset } from "@/lib/api/client";
 import { acceptPurchaseQuote, type PurchaseQuote } from "@/lib/api/quotes";
 import PurchaseQuoteSummary from "./PurchaseQuoteSummary";
 import { useEffect, useState } from "react";
+import { formatUnits } from "viem";
+import { paymentToken, paymentAmount } from "@/lib/blockchain/paymentToken";
 
 import {
   useAccount,
@@ -22,9 +24,10 @@ import AuctionPanel from "./AuctionPanel";
 import { usePaymentCapabilities, marketRouteAvailable } from "@/lib/api/capabilities";
 import LegacyListing from "./LegacyListing";
 import Web2Checkout from "./Web2Checkout";
+import AssetFunding from "./AssetFunding";
 import Reviews from "./Reviews";
-import { checkListing, checkGas, confirmedReceipt, PurchaseCheckError } from "@/lib/blockchain/purchaseSafety";
-import { marketplaceContract, mockUSDCContract, knowledgeAssetContract, legacyMarketplaceContracts, entitlementMarketplaceContracts } from "@/lib/blockchain/contracts";
+import { checkListing, checkUnlisted, checkGas, confirmedReceipt, PurchaseCheckError } from "@/lib/blockchain/purchaseSafety";
+import { marketplaceContract, knowledgeAssetContract, legacyMarketplaceContracts, entitlementMarketplaceContracts } from "@/lib/blockchain/contracts";
 
 import {
   useIsListed,
@@ -64,7 +67,7 @@ function licenseName(license: number) {
 }
 
 function formatUSDC(value: bigint) {
-  return (Number(value) / 1_000_000).toFixed(2);
+  return formatUnits(value, 6);
 }
 
 export default function AssetCard({
@@ -78,6 +81,11 @@ export default function AssetCard({
 }) {
   const verified = useVerifiedWallet();
   const paymentCapabilities = usePaymentCapabilities();
+  const profile = paymentCapabilities.data?.markets.find(m => m.address.toLowerCase() === marketplaceContract.address.toLowerCase());
+  const mockUSDCContract = paymentToken(profile);
+  const formatPayment = (value: bigint) => profile ? `${formatUnits(value, profile.decimals)} ${profile.symbol}` : "Checking payment token…";
+  const [listingPrice, setListingPrice] = useState(formatUSDC(asset.priceUSDC));
+  const [priceConfirmed, setPriceConfirmed] = useState(false);
   const purchaseAvailable = !paymentCapabilities.isError && marketRouteAvailable(paymentCapabilities.data, "fixed_price", marketplaceContract.address, mockUSDCContract.address);
   const { writeContractAsync } = useWriteContract();
   const [cancelling, setCancelling] = useState(false);
@@ -188,7 +196,7 @@ export default function AssetCard({
     hash: usdcApproveHash,
     isPending: isUSDCApprovePending,
     error: usdcError,
-  } = useUSDCWrite();
+  } = useUSDCWrite(mockUSDCContract.address);
 
   /*
    * ============================================================
@@ -285,7 +293,7 @@ export default function AssetCard({
    * ============================================================
    */
 
-  function handleList() {
+  async function handleList() {
   if (!verified) { setListingError("Log in and verify your connected wallet in Account first."); return; }
   if (chainId !== polygonAmoy.id) {
     setListingError("Switch to Polygon Amoy before listing.");
@@ -361,11 +369,12 @@ export default function AssetCard({
     }
   }
 
-  listFixedPrice(
-    tokenId,
-    asset.priceUSDC,
-    recipients
-  );
+  try {
+    if (!profile || !publicClient || !priceConfirmed) throw new Error("Confirm the listing price and payment token first.");
+    const amount = paymentAmount(listingPrice, profile.decimals);
+    await checkUnlisted(publicClient, entitlementMarketplaceContracts, tokenId);
+    listFixedPrice(tokenId, amount, recipients);
+  } catch (error) { setListingError(error instanceof Error ? error.message : "Could not verify listing terms."); }
 }
 
   /*
@@ -412,13 +421,14 @@ export default function AssetCard({
         setPurchaseQuote(await api<PurchaseQuote>(`/api/purchase-quotes/asset/${tokenId}`, { method: "POST" }));
         return;
       }
-      const expected = { buyer: connectedAddress, market: marketplaceContract.address, token: mockUSDCContract.address,
+      const decimals = await publicClient.readContract({ ...mockUSDCContract, functionName: "decimals" }) as number;
+      const expected = { buyer: connectedAddress, market: marketplaceContract.address, token: mockUSDCContract.address, decimals,
         tokenId, listingId: BigInt(listingId as bigint), amount: marketplacePrice };
       try { await acceptPurchaseQuote(purchaseQuote, expected); }
       catch (error) { setPurchaseQuote(null); throw new PurchaseCheckError(error instanceof Error ? error.message : "Review a new quote."); }
       await checkListing(publicClient, marketplaceContract, knowledgeAssetContract, tokenId, connectedAddress, BigInt(listingId as bigint), marketplacePrice, legacyMarketplaceContracts);
       const balance = await publicClient.readContract({ ...mockUSDCContract, functionName: "balanceOf", args: [connectedAddress] }) as bigint;
-      if (balance < marketplacePrice) throw new PurchaseCheckError("Insufficient MockUSDC. Fund your Amoy wallet before buying.");
+      if (balance < marketplacePrice) throw new PurchaseCheckError(`Insufficient ${profile?.symbol ?? "payment token"}. Fund your Amoy wallet before buying.`);
       const allowance = await publicClient.readContract({ ...mockUSDCContract, functionName: "allowance", args: [connectedAddress, marketplaceContract.address] }) as bigint;
       if (allowance < marketplacePrice) {
         await checkGas(publicClient, mockUSDCContract, "approve", [marketplaceContract.address, marketplacePrice], connectedAddress);
@@ -765,13 +775,16 @@ export default function AssetCard({
     </div>
 
     {/* LIST */}
+    <label className="block">Listing price ({profile?.symbol ?? "checking token"})<input className="w-full rounded border p-2" inputMode="decimal" value={listingPrice} onChange={event => { setListingPrice(event.target.value); setPriceConfirmed(false); }} /></label>
+    <p className="text-sm">Reference price: {formatUSDC(asset.priceUSDC)} USDC. The listing uses the token shown above; no currency conversion is implied.</p>
+    <label className="block"><input type="checkbox" checked={priceConfirmed} onChange={event => setPriceConfirmed(event.target.checked)} /> I confirm {listingPrice} {profile?.symbol} as my listing price.</label>
 
     <button
       type="button"
       onClick={handleList}
       disabled={
         isListingPending ||
-        isListingConfirming
+        isListingConfirming || !profile || !priceConfirmed
       }
       className="w-full rounded-md bg-black px-4 py-2 font-medium text-white hover:bg-gray-800 disabled:opacity-50"
     >
@@ -815,7 +828,7 @@ export default function AssetCard({
             <span className="font-medium">
               Purchase Price:
             </span>{" "}
-            {formatUSDC(marketplacePrice)} USDC
+            {formatPayment(marketplacePrice)}
           </div>
           {!purchaseAvailable && <p role="status">Purchase availability is not verified. Check supported routes on the funding page before paying.</p>}
           {purchaseQuote && <PurchaseQuoteSummary quote={purchaseQuote} />}
@@ -835,24 +848,24 @@ export default function AssetCard({
           >
             {buyStep === "approving" &&
             isUSDCApprovePending
-              ? "Confirm USDC approval..."
+              ? `Confirm ${profile?.symbol ?? "token"} approval...`
               : buyStep === "approving" &&
                 isUSDCApprovalConfirming
-              ? "Approving USDC..."
+              ? `Approving ${profile?.symbol ?? "token"}...`
               : buyStep === "buying" &&
                 isPurchasePending
               ? "Confirm purchase in wallet..."
               : buyStep === "buying" &&
                 isPurchaseConfirming
               ? "Purchasing Asset..."
-              : `${purchaseQuote ? "Accept quote and buy" : "Review purchase"} - ${formatUSDC(
+              : `${purchaseQuote ? "Accept quote and buy" : "Review purchase"} - ${formatPayment(
                   marketplacePrice
-                )} USDC`}
+                )}`}
           </button>
 
-          <p className="text-sm">You need Amoy test POL for gas, including USDC approval and purchase. No asset is reserved while you fund your wallet or approve tokens.</p>
+          <p className="text-sm">You need Amoy test POL for gas, including token approval and purchase. No asset is reserved while you fund your wallet or approve tokens.</p>
           <Link href="/funding#crypto" className="block underline">Use another cryptocurrency</Link>
-          <Link href="/funding#fiat" className="block underline">Need USDC? Buy with INR (unavailable)</Link>
+          <Link href="/funding#fiat" className="block underline">View sandbox funding methods</Link>
           {buyError && (
             <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-600">
               {buyError}
@@ -881,6 +894,7 @@ export default function AssetCard({
       {purchaseLookupFailed && <p role="alert">Could not verify existing purchase access. Retry before paying.</p>}
       {purchased === true && <p className="mt-4 text-green-700" role="status">Purchase entitlement verified on-chain.</p>}
       {verified && connectedAddress && !isOwner && <Web2Checkout key={connectedAddress} tokenId={tokenId} buyer={connectedAddress} canStart={!!isListed && !purchaseLookupFailed && !purchaseLookupPending && !purchased && asset.active} />}
+      {verified && !isOwner && !!isListed && profile?.symbol === "TRNSK" && <AssetFunding tokenId={tokenId} />}
       {verified && <section className="mt-4 space-y-2"><button className="rounded border p-2" onClick={async () => { setAccessError(""); try { setAccess(await api(`/api/assets/${tokenId}/access`)); } catch (err) { setAccessError(err instanceof Error ? err.message : "Access check failed."); } }}>Check my access</button>{access && <><p>{access.access_granted ? "Your license access is verified." : "No active purchase entitlement for your wallet."}</p>{access.download_path && <button className="block text-blue-700 underline" onClick={async () => { setAccessError(""); try { await downloadAsset(access.download_path!); } catch (err) { setAccessError(err instanceof Error ? err.message : "Download failed."); } }}>Download protected file</button>}{access.file_url && <a className="block text-blue-700 underline" target="_blank" rel="noreferrer" href={access.file_url}>Open asset file</a>}<p className="text-xs text-slate-500">{access.storage_notice}</p></>}{accessError && <p role="alert">{accessError}</p>}</section>}
       <AuctionPanel tokenId={tokenId} auctionId={auctionId} price={asset.priceUSDC} canCreate={isOwner && !isListed && asset.active} />
 
