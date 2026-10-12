@@ -1,5 +1,10 @@
 # DKM status — 2026-10-12
 
+Deployment approval has now been received and public roles saved. Read-only
+preparation passed. Deployment is blocked by an approved-admin/local-key mismatch
+and zero admin test POL. See the current gate in HUMAN_ACTION_REQUIRED.md.
+No transactions have been sent or active addresses changed.
+
 Pre-deployment engineering for the TRNSK college sandbox is implemented and
 automated acceptance passed. The complete interactive college demo is NOT yet
 finished: explicit deployment approval, public role addresses, test funding,

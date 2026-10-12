@@ -1,5 +1,21 @@
 # DKM continuation — 2026-09-30
 
+## Deployment approval received — 2026-10-12
+
+User explicitly approved the three TRNSK Amoy contracts and role mapping in
+sandbox-deployment-addresses.json. Do not ask for that approval again.
+Read-only deployment plan passed at block 49976691; no transactions sent.
+Deployment blocked: contracts/.env PRIVATE_KEY does not match approved admin
+0x733368FEb00BEF70c1DB14bd621CeAAd5f32DF44; admin has zero test POL.
+Treasury has about 1.283 test POL; settlement and recorder also have zero.
+trnsk-deployment-preflight.json estimates about 0.4523 test POL including twice
+current gas price and a 100000-gas wiring budget. Ask user to fund admin with
+0.5 Amoy test POL and save its key ONLY in ignored contracts/.env PRIVATE_KEY.
+Preserve their old wallet key privately. Never use the mismatched signer, transfer
+treasury funds without authorization, or activate new app addresses before verified
+deployment. After user saves/funds locally, recheck key match/balance and proceed
+under existing approval. Active app and old contracts remain unchanged.
+
 ## Active TRNSK continuation — 2026-10-12 (pre-deployment checks passed)
 
 Attachment deb8915c-babc-49f8-a601-9933c2166191 supersedes the older payment plan.

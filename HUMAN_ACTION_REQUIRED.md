@@ -1,5 +1,29 @@
 # Human actions — TRNSK college sandbox, 2026-10-12
 
+## Current gate: approval received; deployer setup required
+
+The user approved deployment and the role mapping in
+sandbox-deployment-addresses.json. The older approval request below is retained
+as the approved scope; no repeat approval is required.
+
+ACTION REQUIRED: Configure and fund the approved deployment wallet.
+WHY: The current local deployer key belongs to a different address. Approved admin
+0x733368FEb00BEF70c1DB14bd621CeAAd5f32DF44 has zero Amoy test POL.
+WHERE: MetaMask on Polygon Amoy 80002 and ignored contracts/.env.
+WHAT I NEED TO DO: Fund that admin with 0.5 TEST POL; safely retain the existing
+wallet key privately, then set PRIVATE_KEY in contracts/.env to the approved
+admin wallet's key locally. Do not paste the key into chat. Read-only gas estimate
+at block 49976731 is about 0.4523 POL with twice-current-gas-price allowance and
+100000 gas for wiring; refresh before signing. Treasury currently holds about
+1.283 test POL, if you choose to fund from it yourself. Do not buy real POL.
+WHAT I MUST NOT SHARE: Private keys, seed phrases or full .env contents.
+EXPECTED RESULT: Local key matches the approved admin and has sufficient test gas.
+WHAT TO SEND BACK: “Admin key saved locally and admin funded,” optionally with
+the public funding transaction hash. Codex will recheck and use existing approval.
+
+Read-only wiring/token preparation passed; no deployment transactions were sent.
+Settlement/recorder funding remains the later, separate setup step.
+
 ## ACTION REQUIRED: Approve Amoy sandbox deployment
 
 WHY: Transak staging delivers TRNSK, while the existing market accepts MockUSDC.
