@@ -133,6 +133,25 @@ npx hardhat test
 
 The package's `npm test` script is a placeholder; use the Hardhat test command. Network deployment requires `ALCHEMY_AMOY_URL` and a test wallet's `PRIVATE_KEY` in `contracts/.env`. See [contracts/scripts](contracts/scripts) for deployment and verification scripts.
 
+## API and validation guide
+
+Start PostgreSQL/pgvector and Ollama before the backend, then start the frontend. The configured browser origin is `http://localhost:3000`; a different frontend origin also needs a corresponding backend CORS change.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /health` | Inspect service configuration/readiness, including the legacy token check noted above |
+| `POST /api/analyze` | Upload a file as multipart data for extraction and enrichment |
+| `POST /api/upload-ipfs` | Upload a file and metadata to the IPFS publishing pipeline |
+| `POST /api/search` | Search with JSON `query` and optional `domain` / `max_price` |
+| `GET /api/assets/{token_id}/access?wallet_address=...` | Read on-chain purchase/access status |
+| `POST /api/assets/{vector_id}/link-token` | Associate a stored vector asset with a token and creator |
+
+Use the interactive `/docs` page for the exact multipart fields and response schemas. For example, a search body is `{"query":"soil biodiversity","max_price":10}`.
+
+For a demonstration, analyze a small sample document, review the generated metadata, publish with test configuration, and confirm that search finds it. For the wallet flow, check that frontend/backend contract addresses agree before using an Amoy test wallet.
+
+From `frontend/`, `npm run build` checks the production build. From `contracts/`, `npx hardhat test` runs the contract tests. Backend test modules use pytest and include calls to external services; install `pytest pytest-asyncio` in the backend environment and inspect/configure the selected tests before running them. No single root command starts or validates the entire system.
+
 ## Current limits
 
 - The backend dependency manifest needs completion; the setup above is derived from imports and has not been rehearsed in a fresh environment.
