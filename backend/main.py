@@ -10,7 +10,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from services.text_extractor import extract_text
-from services.llm_enrichment import enrich_document
+from services.asset_price import asset_price
+from services.llm_enrichment import enrich_document, AnalysisUnavailable
 from services.embedding import generate_embedding
 from services.pgvector_client import (
     setup_tables,
@@ -201,7 +202,10 @@ async def analyze(file: UploadFile = File(...), user=Depends(current_user)):
     if len(text.strip()) < 50:
         raise HTTPException(422, "Could not extract readable text from file")
 
-    metadata = await enrich_document(text)
+    try:
+        metadata = await enrich_document(text)
+    except AnalysisUnavailable as exc:
+        raise HTTPException(503, str(exc)) from None
     if metadata["quality_score"] < 0.4:
         raise HTTPException(
             422,
@@ -222,24 +226,30 @@ async def upload_ipfs(
         meta = json.loads(metadata_json)
         if not isinstance(meta, dict) or not isinstance(meta.get("title"), str) or not meta["title"].strip():
             raise ValueError()
-        price = meta.get("recommended_price_usdc")
+        price = asset_price(meta.get("recommended_price_usdc"))
         quality = meta.get("quality_score")
-        if type(price) is not int or not 1 <= price <= 100 or type(quality) not in (int, float) or not 0.4 <= quality <= 1:
+        if type(quality) not in (int, float) or not 0.4 <= quality <= 1:
             raise ValueError()
         if not isinstance(meta.get("summary"), str) or len(meta["summary"]) > 20000:
             raise ValueError()
         if not isinstance(meta.get("domain"), str) or not isinstance(meta.get("tags"), list) or any(not isinstance(t, str) for t in meta["tags"]):
             raise ValueError()
     except (ValueError, TypeError):
-        raise HTTPException(422, "Supply valid analyzed metadata, quality 0.4–1 and a whole USDC price from 1–100") from None
+        raise HTTPException(422, "Supply valid analyzed metadata, quality 0.4–1 and a USDC price from 0.01–100 with at most two decimal places") from None
 
     # ---------------------------------------------------------
     # Generate embedding
     # ---------------------------------------------------------
 
-    embedding = generate_embedding(
-        meta.get("summary", "")
-    )
+    # Reassess the bytes: client-supplied scores and metadata are not authoritative.
+    try:
+        meta = await enrich_document(extract_text(data, file.filename))
+    except AnalysisUnavailable as exc:
+        raise HTTPException(503, str(exc)) from None
+    if meta["quality_score"] < 0.4:
+        raise HTTPException(422, "Document assessment is below the minimum. Review the analysis before uploading.")
+    meta["recommended_price_usdc"] = float(price)
+    embedding = await asyncio.to_thread(generate_embedding, meta.get("summary", ""))
 
     # ---------------------------------------------------------
     # Fraud detection
@@ -313,7 +323,9 @@ async def upload_ipfs(
     meta["blake3_hash"] = quantum_hash(data)
     meta["storage"] = "encrypted-v1"
 
-    meta_bytes = json.dumps(meta).encode()
+    # Evidence quotes are shown privately during analysis, not published with catalog metadata.
+    public_meta = {key: value for key, value in meta.items() if key != "quality_breakdown"}
+    meta_bytes = json.dumps(public_meta).encode()
 
     # ---------------------------------------------------------
     # Upload METADATA JSON to Pinata
@@ -382,13 +394,14 @@ async def upload_ipfs(
         "file_cid": file_cid,
         "metadata_cid": metadata_cid,
         "vector_id": stored["vector_id"],
+        "quality_score": meta["quality_score"],
     }
 
 
 class SearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=2000)
     domain: str | None = Field(default=None, max_length=100)
-    max_price: int | None = Field(default=None, ge=0, le=1000000)
+    max_price: float | None = Field(default=None, ge=0, le=1000000, allow_inf_nan=False)
     min_quality: float = Field(default=0.4, ge=0.4, le=1)
 
 
@@ -405,7 +418,10 @@ async def read_upload(file):
 async def search(body: SearchRequest):
     if not body.query.strip():
         raise HTTPException(400, "Enter a search query")
-    results = await quantum_enhanced_search(body.query.strip(), domain=body.domain, max_price=body.max_price, min_quality=body.min_quality)
+    try:
+        results = await quantum_enhanced_search(body.query.strip(), domain=body.domain, max_price=body.max_price, min_quality=body.min_quality)
+    except (OSError, RuntimeError):
+        raise HTTPException(503, "Search is temporarily unavailable. Check that the local embedding model and database are running.") from None
     return {"query": body.query, "results": results, "count": len(results)}
 
 
@@ -528,6 +544,33 @@ async def asset_details(token_id: int):
 
 class LinkTokenRequest(BaseModel):
     token_id: int = Field(gt=0)
+
+
+@app.post("/api/assets/{vector_id}/recover-mint")
+async def recover_mint(vector_id: str, user=Depends(wallet_user)):
+    from services import blockchain
+    from services.mint_recovery import find_mint
+    from services.payments.settlement import function_abi
+    conn = await get_conn()
+    try:
+        row = await conn.fetchrow("SELECT * FROM knowledge_assets WHERE vector_id=$1 AND user_id=$2", vector_id, user["id"])
+        if not row:
+            raise HTTPException(404, "Upload not found in your account")
+        def lookup():
+            if blockchain.w3.eth.chain_id != 80002:
+                raise ValueError("Wrong chain")
+            registry = blockchain.w3.eth.contract(address=blockchain.knowledge_asset.address,
+                abi=blockchain.KNOWLEDGE_ASSET_ABI + [function_abi("totalMinted", [], ["uint256"])])
+            return find_mint(registry, blockchain.w3.eth.block_number, row["file_cid"], row["metadata_cid"], user["wallet_address"])
+        try:
+            token_id = row["token_id"] or await asyncio.to_thread(lookup)
+        except Exception:
+            raise HTTPException(503, "Could not finish checking the blockchain. Retry before minting again; advanced recovery also accepts a confirmed token ID.") from None
+    finally:
+        await conn.close()
+    if token_id:
+        await link_token(vector_id, LinkTokenRequest(token_id=token_id), user)
+    return {"token_id": token_id}
 
 
 @app.post("/api/assets/{vector_id}/link-token")

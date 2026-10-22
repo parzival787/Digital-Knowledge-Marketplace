@@ -26,13 +26,13 @@ export default function LegacyListing({ tokenId, marketAddress }: { tokenId: big
     setBusy(true); setStatus("");
     try {
       if (chainId !== 80002) await switchChainAsync({ chainId: 80002 });
-      await checkGas(client, market, "cancelListing", [id], address);
-      const tx = await writeContractAsync({ ...market, chainId: 80002, functionName: "cancelListing", args: [id], account: address });
+      const fees = await checkGas(client, market, "cancelListing", [id], address);
+      const tx = await writeContractAsync({ ...fees, ...market, chainId: 80002, functionName: "cancelListing", args: [id], account: address });
       setHash(tx);
       await confirmedReceipt(client, tx);
       await cache.invalidateQueries();
       setStatus("Previous listing cancelled. You can now review relisting on the current marketplace.");
-    } catch { setStatus("Cancellation not verified. Check the transaction before retrying."); }
+    } catch (error) { setStatus(error instanceof Error ? error.message : "Cancellation not verified. Check the transaction before retrying."); }
     finally { setBusy(false); }
   }
   if (listing.isError || details.isError) return <p role="alert">Could not check a previous listing. Retry before relisting.</p>;

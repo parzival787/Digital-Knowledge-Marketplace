@@ -23,15 +23,16 @@ def snapshot(wallet, page):
     for configured in blockchain.entitlement_markets():
         market=w3.eth.contract(address=configured.address,abi=ABIS['marketplace'])
         call=lambda name,*args:getattr(market.functions,name)(*args).call(block_identifier=block)
-        if call('knowledgeAsset').lower()!=asset.address.lower(): raise ValueError('Registry mismatch')
+        if call('knowledgeAsset').lower()!=(asset.address if market.address.lower()==blockchain.MARKETPLACE_ADDRESS.lower() else blockchain.legacy_registry_address()).lower(): raise ValueError('Registry mismatch')
         address=market.address
         for token in range(start,min(end,minted+1)):
-            if call('hasPurchased',token,wallet):
+            if blockchain.market_token_supported(address, token) and call('hasPurchased',token,wallet):
                 result['entitlements'].append({'market':address,'token_id':str(token),'purchase_count':str(call('purchaseCount',token,wallet))})
         for kind,count_name in (('listings','totalListingsCreated'),('auctions','totalAuctionsCreated')):
             count=call(count_name);result['has_more'] |= count>=end
             for identifier in range(start,min(end,count+1)):
                 row=call(kind,identifier)
+                if not blockchain.market_token_supported(address, row[0]): continue
                 if kind=='listings' and row[2].lower()==wallet.lower():
                     result[kind].append({'market':address,'id':str(identifier),'token_id':str(row[0]),'amount':str(row[1]),'active':row[4]})
                 elif kind=='auctions' and wallet.lower() in (row[3].lower(),row[4].lower()):

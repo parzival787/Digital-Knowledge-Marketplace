@@ -37,6 +37,21 @@ describe("KnowledgeAsset", function () {
     expect(asset.active).to.equal(true);
   });
 
+  it("accepts the one-cent mint and update boundary and rejects zero/below-minimum updates", async function () {
+    expect(await contract.MIN_PRICE_USDC()).to.equal(10_000n);
+    await contract.connect(seller).mint("cent-file", "cent-metadata", 10_000n, 0, 80);
+    expect((await contract.getAsset(1)).priceUSDC).to.equal(10_000n);
+    await contract.connect(seller).updatePrice(1, 500_000n);
+    await contract.connect(seller).updatePrice(1, 10_000n);
+    expect((await contract.getAsset(1)).priceUSDC).to.equal(10_000n);
+    for (const price of [0n, 9_999n]) {
+      await expect(contract.connect(seller).mint("file", "metadata", price, 0, 80))
+        .to.be.revertedWithCustomError(contract, "PriceTooLow").withArgs(price, 10_000n);
+      await expect(contract.connect(seller).updatePrice(1, price))
+        .to.be.revertedWithCustomError(contract, "PriceTooLow").withArgs(price, 10_000n);
+    }
+  });
+
   it("assigns NFT ownership to seller", async function () {
     await contract.connect(seller).mint(
       "QmCID",
@@ -101,19 +116,19 @@ describe("KnowledgeAsset", function () {
     );
   });
 
-  it("reverts when price is below 1 USDC", async function () {
+  it("reverts when price is below 0.01 USDC", async function () {
     await expect(
       contract.connect(seller).mint(
         "QmCID",
         "QmMeta",
-        500_000n,
+        9_999n,
         0,
         80
       )
     ).to.be.revertedWithCustomError(
       contract,
       "PriceTooLow"
-    ).withArgs(500_000n, 1_000_000n);
+    ).withArgs(9_999n, 10_000n);
   });
 
   it("reverts when price is above 100 USDC", async function () {

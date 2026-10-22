@@ -1,5 +1,143 @@
 # DKM continuation — 2026-09-30
 
+## Mint recovery and cancellation — 2026-10-21
+
+Dashboard labels resume as requiring no code; token-ID linking is now advanced
+recovery with an explanation that failed mints have no token ID. Added an
+account/wallet-scoped recover-mint endpoint that searches the current registry
+(including its preserved legacy prefix) for matching file CID, metadata CID and
+creator, then reuses the existing validated link endpoint. RPC failures block
+retry; automatic scanning is bounded to 100 tokens, after which manual token-ID
+linking remains available. No draft uploads or Pinata files are deleted.
+Mint uses useSearchParams under Suspense to restore uploads in production;
+checks completed mints before signing, and stores pending transaction hashes per
+upload and registry in browser localStorage so reloads can resume confirmation.
+Current cancellation now switches to Amoy and uses confirmedReceipt; legacy
+cancellation shows the actual error. Read-only Amoy cancellation simulations
+passed for all six active legacy listings (51,299 gas each). Current market had
+zero active listings. No user listings cancelled or user NFTs minted by agent.
+17 frontend tests, three recovery tests (including isolated PostgreSQL account
+boundaries), TypeScript check and production build passed. Services restarted.
+
+## LIVE one-cent Amoy transition — 2026-10-21
+
+Supersedes the source-only status below. User authorized public testnet activation.
+Deployed and verified, with receipts in contracts/cents-deployment.json:
+- KnowledgeAssetSuccessor: 0xCA6f1E6C08Dddda08e4288B8eFE07bF54f67AeD7
+- Marketplace: 0xc1cfA63fDA41cD1Ee76B24F1D1B2b993661a67A5
+- RoyaltySplitter: 0x36CAa5b59825a378664E75b5EFB30988F71901c0
+- Existing MockUSDC unchanged; treasury and 500-bps seller fee preserved.
+
+Successor reads IDs 1–6 from the original registry without copying or modifying
+those NFTs. New NFTs start at 7 and accept 10,000 units (0.01 USDC). The legacy
+prefix is fixed: later direct mints on the old contract are outside this catalog.
+Original marketplaces and purchase records remain intact. Backend entitlement
+checks, purchase counts and frontend checks only consult legacy markets for IDs
+1–6; a later legacy mint with ID 7 cannot grant access to successor asset 7.
+Legacy asset changes still belong on the original registry. Existing listings
+must be cancelled on the previous market before relisting in the current one.
+
+Frontend addresses and backend public .env deployment references updated.
+Local frontend/backend restarted on 3000/8000. Backend health reports all checks
+true; capabilities verifies both current and previous marketplaces. Fiat/receipt
+workers and automatic event indexer remain disabled in the launched process.
+131 contract tests, 9 backend checks, frontend regression tests, contract TS
+typecheck and frontend production build passed. Live read-only mint simulation
+using the user's CIDs at 0.01 USDC estimated 287,627 gas. No user NFT minted by
+the agent during deployment. No commits pushed in this activation task.
+
+## One-cent contract source minimum — 2026-10-21
+
+KnowledgeAsset.MIN_PRICE_USDC is now 10,000 base units (0.01 USDC) in source,
+applying to mint and updatePrice. Tests cover accepting exactly one cent and
+rejecting zero/9,999 units. All 130 local Hardhat tests passed. This is NOT
+deployed: the active 0x2C16409A3db9880f9A70e71B5b131A17db533Fc9 still requires
+1 USDC. It has no minimum setter; Marketplace's asset registry is immutable.
+A future deployment transition must retain the old registry, marketplaces,
+asset identities and buyer entitlements rather than simply swapping addresses.
+
+## Wallet gas preparation — 2026-10-21
+
+All frontend wallet writes now use shared checkGas preparation: enforce Amoy,
+use the existing 25 gwei priority-fee floor, estimate the specific call with those
+fees, add 20% gas margin, check POL balance against the maximum fee, and reject
+estimates above the lesser of block gas limit and the observed RPC cap 33,554,432.
+Prepared gas and fees are explicitly forwarded for mint, NFT/USDC approvals,
+listing, purchase, cancellation and auction actions, including legacy markets.
+Removed the fixed purchase gas override. Research page explains QAOA/VQC.
+15 frontend regression tests and production build passed; existing optional
+pino-pretty warning remains. Local preview restarted. No wallet transaction was
+signed, no contracts deployed, and no existing asset data changed in this fix.
+
+## UI, search and evidence-based scoring — 2026-10-20
+
+Current feature branch remains codex/dkm-payment-persistence; changes are local.
+Wallet-only frontend is preserved; provider backend/history remains intact.
+Search now excludes unlinked uploads, deduplicates token IDs/content hashes before
+limiting candidates, and deterministically uses cosine-based maximum marginal
+relevance (0.85 query relevance / 0.15 redundancy). No stochastic graph/QUBO
+reranking runs in production search. Legacy helpers and QAOA/VQC research remain.
+Public search returns catalog fields only, with summaries and direct single-asset
+links; removed misleading relevance percentages and raw storage identifiers.
+The observed database had 23 uploads, only two linked tokens (1, 6); drafts were
+the reason most former results had no View link. Nothing was deleted or repriced.
+MiniLM now loads its existing local cache only, avoiding network lookups during
+search requests. Live search returned HTTP 200 and two linked assets in 2.95 sec.
+
+Ollama now uses structured JSON schema, temperature 0 and seed 31, with an
+excerpt-v1 rubric: clarity, specificity, completeness and evidence, each 0–4.
+Backend computes the equal-weight total. Missing evidence gets zero; fabricated
+quotes/invalid output are rejected, with no fabricated fallback score.
+Upload reassesses actual file bytes and persists the server score; client scores
+cannot override it. Mint uses that returned score. Evidence quotes are not
+published in IPFS metadata. Existing asset scores are not retroactively changed.
+Real synthetic checks: detailed document 0.5625 twice; vague document 0.125.
+Evidence: output/research/ui_search_scoring_checks.json. Scores remain uncalibrated
+AI judgments of at most 4,000 extracted characters, not factual/ originality proof.
+
+Verification: 14 frontend tests, TypeScript and final production build passed
+(existing optional pino-pretty warning). QAOA/VQC/results checks passed without
+rerunning benchmarks. Initial backend run found pgvector Vector decoding failure;
+fixed with to_list(). Final 10 targeted auth/upload/search/scoring tests passed.
+One interim rerun hit stopped Docker, not a code assertion failure. Docker was
+restarted. Preview API runs with settlement/recording/provider/index workers off.
+Browser login and semantic search verified with a disposable local account.
+The browser-found single-asset query routing bug is fixed and verified for token 6.
+Details loaded without file IDs/hashes; logout restored welcome-only UI.
+Disposable account ID 6 (dkm_ui_check_20261019) and its sessions were removed after
+confirming no wallet, uploads or payment orders. Do not recreate it unnecessarily.
+No public transaction, deployment, push or merge performed in this continuation.
+
+## Wallet-only UI and cent pricing — 2026-10-17
+
+User requested removing Transak/UPI/card sandbox frontend, keeping wallet payments,
+and allowing prices below $1. Provider panels, funding links, payout controls and
+Web2 dashboard controls are removed; /funding redirects to /marketplace. Backend
+provider code and historical records are retained. Future integration is research
+only in PAYMENT_INTEGRATION_OPTIONS.md; do not resume provider deployment from
+older roadmap notes without reconciling this changed scope.
+Mint/upload accepts 0.01–100 USDC in cent increments; listing already supports
+fractional token amounts. Search accepts fractional limits. Upload prices now use
+NUMERIC(18,6), converted from INTEGER without repricing existing assets. Local
+migration verified all 23 existing asset prices unchanged. Restart backend if it
+is not running with reload. Wallet gas remains separate from MockUSDC prices.
+Frontend: 14 tests, TypeScript and production build passed (existing optional
+pino-pretty dependency warning). Prior local fixes for mint's 25-gwei tip and
+ABI-shaped active asset purchase check remain intact. No public transactions.
+
+## Test-wallet funding update — 2026-10-14
+
+User requested 1 Amoy test POL to each necessary wallet. Configured sender is
+approved treasury 0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66. It only had
+1.283169190925924689 POL. Sent 1 POL to approved admin first, transaction
+0x9bb1e646cbc52c1705da0054a1ff90b343c49f04396cbd7eb11dd89f9ed4d71a,
+block 50137465. Public journal: trnsk-wallet-funding.json. Do not resend admin.
+Treasury remaining: 0.279408267386467689 test POL. Settlement and recorder still
+need 1 POL each; ask user to add 2 test POL to treasury to cover both plus gas.
+Admin gas blocker is resolved, but its matching deployment key is still not
+configured: the existing contracts/.env PRIVATE_KEY is treasury's key. Previous
+three-contract approval persists; do not deploy from the wrong wallet.
+
 ## Deployment approval received — 2026-10-12
 
 User explicitly approved the three TRNSK Amoy contracts and role mapping in

@@ -2,6 +2,7 @@ import uuid
 import asyncio
 import os
 import httpx
+from decimal import Decimal
 
 from services.pgvector_client import get_asset_by_token_id, get_conn
 
@@ -25,8 +26,11 @@ class PaymentService:
         if not provider:
             raise ValueError(f"Payment method '{request.payment_method.value}' is not available yet")
         amount = asset["price_usdc"]
-        if not isinstance(amount, int) or amount <= 0:
+        if not isinstance(amount, (int, Decimal)) or amount <= 0:
             raise ValueError("Knowledge asset has no valid payment price")
+        if amount != int(amount):
+            raise ValueError("Fractional prices currently require wallet checkout")
+        amount = int(amount)
 
         # Preserve the existing database amount convention; do not reinterpret
         # whole-USDC asset prices as six-decimal on-chain units here.
@@ -51,7 +55,7 @@ class PaymentService:
             if isinstance(provider, RazorpayProvider):
                 from .settlement import validate_checkout
                 context = await asyncio.to_thread(validate_checkout, order)
-                from decimal import Decimal, localcontext
+                from decimal import localcontext
                 with localcontext() as ctx:
                     ctx.prec = 100
                     token_amount = Decimal(context["payment_amount_base_units"]) / Decimal(10)**context["payment_decimals"]

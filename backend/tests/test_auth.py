@@ -15,6 +15,54 @@ import main
 
 
 class AuthTests(unittest.IsolatedAsyncioTestCase):
+    async def test_recover_mint_is_account_scoped_and_revalidates_chain_content(self):
+        from unittest.mock import Mock
+        from services import blockchain, mint_recovery
+        path = "/api/assets/recovery-upload/recover-mint"
+        self.assertEqual((await self.client.post(path)).status_code, 401)
+        user = await self.signup()
+        await self.verify()
+        self.assertEqual((await self.client.post(path)).status_code, 404)
+        conn = await self.isolated()
+        await conn.execute("INSERT INTO knowledge_assets(vector_id,user_id,file_cid,metadata_cid,price_usdc) VALUES ('recovery-upload',$1,'file','meta',0.01)", user["id"])
+        await conn.close()
+        w3 = Mock()
+        w3.eth.chain_id = 80002
+        w3.eth.block_number = 123
+        asset = {"creator": self.wallet.address, "ipfs_cid": "file", "metadata_cid": "meta", "price_usdc": 10000}
+        with patch.object(blockchain, "w3", w3), patch.object(mint_recovery, "find_mint", return_value=None) as lookup, patch.object(main, "get_knowledge_asset", return_value=asset):
+            self.assertIsNone((await self.client.post(path)).json()["token_id"])
+            lookup.side_effect = RuntimeError("RPC failed")
+            self.assertEqual((await self.client.post(path)).status_code, 503)
+            lookup.side_effect = None
+            lookup.return_value = 7
+            asset["metadata_cid"] = "wrong"
+            self.assertEqual((await self.client.post(path)).status_code, 403)
+            asset["metadata_cid"] = "meta"
+            response = await self.client.post(path)
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()["token_id"], 7)
+        await self.client.post("/api/auth/logout")
+        await self.signup("other")
+        await self.verify(Account.create())
+        self.assertEqual((await self.client.post(path)).status_code, 404)
+
+    async def test_price_migration_preserves_existing_uploads_and_cents_search(self):
+        from decimal import Decimal
+        conn = await self.isolated()
+        await conn.execute("ALTER TABLE knowledge_assets ALTER COLUMN price_usdc TYPE INTEGER USING price_usdc::integer")
+        await conn.execute("INSERT INTO knowledge_assets(vector_id,price_usdc) VALUES ('old-price',7)")
+        await conn.close()
+        await db.setup_tables()
+        await db.setup_tables()
+        conn = await self.isolated()
+        self.assertEqual(await conn.fetchval("SELECT price_usdc FROM knowledge_assets WHERE vector_id='old-price'"), Decimal(7))
+        await conn.close()
+        saved = await db.insert_embedding("Cent asset", "other", [], 0.8, 0.29, uuid.uuid4().hex, [0.1]*384)
+        results = await db.semantic_search([0.1]*384, max_price=0.29)
+        self.assertIn(saved["vector_id"], [row["vector_id"] for row in results])
+        self.assertEqual(await db.semantic_search([0.1]*384, max_price=0.28), [])
+
     async def test_concurrent_auth_abuse_limit_is_atomic(self):
         import asyncio
         from fastapi import HTTPException
@@ -122,6 +170,11 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
         created = await self.client.post("/api/payments/create", json={"token_id": 1, "buyer_address": self.wallet.address, "payment_method": "mock"})
         self.assertEqual(created.status_code, 200, created.text)
         order_id = created.json()["order"]["order_id"]
+        conn = await self.isolated()
+        await conn.execute("UPDATE knowledge_assets SET price_usdc=0.29 WHERE vector_id='owned'")
+        await conn.close()
+        fractional = await self.client.post("/api/payments/create", json={"token_id": 1, "buyer_address": self.wallet.address, "payment_method": "mock"})
+        self.assertEqual(fractional.status_code, 400)  # Never round cents into legacy whole-dollar orders.
         self.assertNotIn("settlement_raw_tx", created.text)
         self.assertEqual((await self.client.get("/api/account/dashboard")).json()["assets"][0]["vector_id"], "owned")
         await self.client.post("/api/auth/logout")
@@ -175,18 +228,23 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
         files = {"file": ("example.txt", b"document content " * 20, "text/plain")}
         invalid = await self.client.post("/api/upload-ipfs", files=files, data={"metadata_json": "[]"})
         self.assertEqual(invalid.status_code, 422)
-        meta = {"title": "Example", "summary": "Example document", "tags": ["test"], "domain": "other", "recommended_price_usdc": 7, "quality_score": 0.8}
+        meta = {"title": "Example", "summary": "Example document", "tags": ["test"], "domain": "other", "recommended_price_usdc": 0.29, "quality_score": 0.8}
         original_client = httpx.AsyncClient
         uploaded = []
         transport = httpx.MockTransport(lambda request: uploaded.append(request.content) or httpx.Response(200, json={"data": {"cid": "test-cid"}}))
-        with patch.dict("os.environ", {"PINATA_JWT": "test-only"}), patch.object(main, "generate_embedding", return_value=[0.1]*384), patch.object(main.fraud_detector, "check_upload", return_value={"is_fraud": False}), patch.object(main.httpx, "AsyncClient", side_effect=lambda **kwargs: original_client(transport=transport, **kwargs)):
+        with patch.object(main, "enrich_document", return_value={**meta, "quality_score": 0.625}), patch.dict("os.environ", {"PINATA_JWT": "test-only"}), patch.object(main, "generate_embedding", return_value=[0.1]*384), patch.object(main.fraud_detector, "check_upload", return_value={"is_fraud": False}), patch.object(main.httpx, "AsyncClient", side_effect=lambda **kwargs: original_client(transport=transport, **kwargs)):
             response = await self.client.post("/api/upload-ipfs", files=files, data={"metadata_json": json.dumps(meta)})
         self.assertEqual(response.status_code, 200, response.text)
         conn = await self.isolated()
         row = await conn.fetchrow("SELECT * FROM knowledge_assets WHERE vector_id=$1", response.json()["vector_id"])
         await conn.close()
         self.assertEqual(row["title"], "Example")
-        self.assertEqual(row["price_usdc"], 7)
+        self.assertEqual(row["quality"], 0.625)
+        self.assertEqual(response.json()["quality_score"], 0.625)
+        from decimal import Decimal
+        self.assertEqual(row["price_usdc"], Decimal("0.29"))
+        self.assertEqual(row["price_usdc"] * 1000000, 290000)
+        self.assertEqual((await self.client.get("/api/account/dashboard")).json()["assets"][0]["price_usdc"], 0.29)
         self.assertEqual(row["user_id"], user["id"])
         self.assertNotIn(files["file"][1], uploaded[0])
         self.assertTrue(row["encrypted_key"])
@@ -359,6 +417,12 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
             await conn.close()
         results = await db.semantic_search([0.1]*384,domain="science",max_price=10,min_quality=0.8)
         self.assertEqual([row["vector_id"] for row in results], ["1"])
+        self.assertEqual(await db.semantic_search([0.1]*384, published_only=True), [])
+        conn = await self.isolated()
+        await conn.execute("UPDATE knowledge_assets SET token_id=1, blake3_hash='same' WHERE vector_id IN ('1','2')")
+        await conn.close()
+        published = await db.semantic_search([0.1]*384, published_only=True)
+        self.assertEqual(len(published), 1)
         self.assertEqual((await self.client.post("/api/search",json={"query":"test","min_quality":1.1})).status_code,422)
         self.assertEqual((await self.client.get("/api/account/activity")).status_code,401)
         await self.signup()

@@ -23,11 +23,9 @@ import { polygonAmoy } from "viem/chains";
 import AuctionPanel from "./AuctionPanel";
 import { usePaymentCapabilities, marketRouteAvailable } from "@/lib/api/capabilities";
 import LegacyListing from "./LegacyListing";
-import Web2Checkout from "./Web2Checkout";
-import AssetFunding from "./AssetFunding";
 import Reviews from "./Reviews";
 import { checkListing, checkUnlisted, checkGas, confirmedReceipt, PurchaseCheckError } from "@/lib/blockchain/purchaseSafety";
-import { marketplaceContract, knowledgeAssetContract, legacyMarketplaceContracts, entitlementMarketplaceContracts } from "@/lib/blockchain/contracts";
+import { marketplaceContract, knowledgeAssetContract, marketsForToken } from "@/lib/blockchain/contracts";
 
 import {
   useIsListed,
@@ -115,7 +113,7 @@ export default function AssetCard({
   >("idle");
 
   const { address: connectedAddress, chainId } = useAccount();
-  const { switchChain } = useSwitchChain();
+  const { switchChain, switchChainAsync } = useSwitchChain();
   const cache = useQueryClient();
   const publicClient = usePublicClient({ chainId: polygonAmoy.id });
   const { data: auctionIdData } = useReadContract({ ...marketplaceContract,
@@ -123,7 +121,7 @@ export default function AssetCard({
   const auctionId = (auctionIdData as bigint | undefined) ?? 0n;
   const { data: purchases, isError: purchaseLookupFailed, isPending: purchaseLookupPending } = useReadContracts({
     allowFailure: false,
-    contracts: entitlementMarketplaceContracts.map(market => ({ ...market,
+    contracts: marketsForToken(tokenId).map(market => ({ ...market,
       chainId: polygonAmoy.id, functionName: "hasPurchased", args: [tokenId, connectedAddress] })),
     query: { enabled: !!connectedAddress, refetchInterval: 10000 },
   });
@@ -273,7 +271,7 @@ export default function AssetCard({
    * ============================================================
    */
 
-  function handleApprove() {
+  async function handleApprove() {
     if (!verified) { setListingError("Log in and verify your connected wallet in Account first."); return; }
     if (!connectedAddress) {
       setListingError(
@@ -284,7 +282,7 @@ export default function AssetCard({
 
     setListingError("");
 
-    approveNFT(tokenId);
+    try { await approveNFT(tokenId); } catch (error) { setListingError(error instanceof Error ? error.message : "Approval failed."); }
   }
 
   /*
@@ -372,8 +370,8 @@ export default function AssetCard({
   try {
     if (!profile || !publicClient || !priceConfirmed) throw new Error("Confirm the listing price and payment token first.");
     const amount = paymentAmount(listingPrice, profile.decimals);
-    await checkUnlisted(publicClient, entitlementMarketplaceContracts, tokenId);
-    listFixedPrice(tokenId, amount, recipients);
+    await checkUnlisted(publicClient, marketsForToken(tokenId), tokenId);
+    await listFixedPrice(tokenId, amount, recipients);
   } catch (error) { setListingError(error instanceof Error ? error.message : "Could not verify listing terms."); }
 }
 
@@ -426,7 +424,7 @@ export default function AssetCard({
         tokenId, listingId: BigInt(listingId as bigint), amount: marketplacePrice };
       try { await acceptPurchaseQuote(purchaseQuote, expected); }
       catch (error) { setPurchaseQuote(null); throw new PurchaseCheckError(error instanceof Error ? error.message : "Review a new quote."); }
-      await checkListing(publicClient, marketplaceContract, knowledgeAssetContract, tokenId, connectedAddress, BigInt(listingId as bigint), marketplacePrice, legacyMarketplaceContracts);
+      await checkListing(publicClient, marketplaceContract, knowledgeAssetContract, tokenId, connectedAddress, BigInt(listingId as bigint), marketplacePrice, marketsForToken(tokenId).slice(1));
       const balance = await publicClient.readContract({ ...mockUSDCContract, functionName: "balanceOf", args: [connectedAddress] }) as bigint;
       if (balance < marketplacePrice) throw new PurchaseCheckError(`Insufficient ${profile?.symbol ?? "payment token"}. Fund your Amoy wallet before buying.`);
       const allowance = await publicClient.readContract({ ...mockUSDCContract, functionName: "allowance", args: [connectedAddress, marketplaceContract.address] }) as bigint;
@@ -439,7 +437,7 @@ export default function AssetCard({
       await checkGas(publicClient, marketplaceContract, "buyAsset", [BigInt(listingId as bigint)], connectedAddress);
       try { await acceptPurchaseQuote(purchaseQuote, expected); }
       catch (error) { setPurchaseQuote(null); throw new PurchaseCheckError(error instanceof Error ? error.message : "Review a new quote."); }
-      await checkListing(publicClient, marketplaceContract, knowledgeAssetContract, tokenId, connectedAddress, BigInt(listingId as bigint), marketplacePrice, legacyMarketplaceContracts);
+      await checkListing(publicClient, marketplaceContract, knowledgeAssetContract, tokenId, connectedAddress, BigInt(listingId as bigint), marketplacePrice, marketsForToken(tokenId).slice(1));
       const hash = await buyAsset(BigInt(listingId as bigint), connectedAddress);
       await confirmedReceipt(publicClient, hash);
       const entitled = await publicClient.readContract({ ...marketplaceContract, functionName: "hasPurchased", args: [tokenId, connectedAddress] });
@@ -496,7 +494,7 @@ export default function AssetCard({
   if (saleMode === "fixed" && !isListed) return null;
 
   return (
-    <div id={`asset-${tokenId}`} className="rounded-xl border p-6 shadow-sm">
+    <div id={`asset-${tokenId}`} className="rounded-2xl border bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
       {!verified && <p className="mb-4 text-sm"><Link href="/account" className="text-blue-700 underline">Log in and verify your wallet</Link> to create listings, bid or pay.</p>}
 
       {/* ======================================================
@@ -576,7 +574,7 @@ export default function AssetCard({
 
         <div>
           <span className="font-medium">
-            Quality Score:
+            AI assessment:
           </span>{" "}
 
           {asset.qualityScore.toString()}/100
@@ -812,12 +810,12 @@ export default function AssetCard({
         if (!verified || !connectedAddress || !publicClient || !listingId) return;
         setCancelling(true); setCancelError("");
         try {
-          if (chainId !== polygonAmoy.id) throw new Error("Switch to Polygon Amoy before cancelling.");
-          const hash = await writeContractAsync({ ...marketplaceContract, account: connectedAddress, chainId: polygonAmoy.id, functionName: "cancelListing", args: [listingId] });
-          const receipt = await publicClient.waitForTransactionReceipt({ hash });
-          if (receipt.status !== "success") throw new Error("Cancellation reverted.");
+          if (chainId !== polygonAmoy.id) await switchChainAsync({ chainId: polygonAmoy.id });
+          const fees = await checkGas(publicClient, marketplaceContract, "cancelListing", [listingId], connectedAddress);
+          const hash = await writeContractAsync({ ...fees, ...marketplaceContract, account: connectedAddress, chainId: polygonAmoy.id, functionName: "cancelListing", args: [listingId] });
+          await confirmedReceipt(publicClient, hash);
           await cache.invalidateQueries();
-        } catch { setCancelError("Cancellation failed or was rejected. Check your network and retry."); }
+        } catch (error) { setCancelError(error instanceof Error ? error.message : "Cancellation failed or was rejected. Check your network and retry."); }
         finally { setCancelling(false); }
       }}>{cancelling ? "Cancelling listing…" : "Cancel listing"}</button>{cancelError && <p role="alert" className="text-red-700">{cancelError}</p>}</div>}
 
@@ -830,7 +828,7 @@ export default function AssetCard({
             </span>{" "}
             {formatPayment(marketplacePrice)}
           </div>
-          {!purchaseAvailable && <p role="status">Purchase availability is not verified. Check supported routes on the funding page before paying.</p>}
+          {!purchaseAvailable && <p role="status">Wallet purchases are temporarily unavailable. Please retry when the network connection is restored.</p>}
           {purchaseQuote && <PurchaseQuoteSummary quote={purchaseQuote} />}
 
           <button
@@ -864,8 +862,6 @@ export default function AssetCard({
           </button>
 
           <p className="text-sm">You need Amoy test POL for gas, including token approval and purchase. No asset is reserved while you fund your wallet or approve tokens.</p>
-          <Link href="/funding#crypto" className="block underline">Use another cryptocurrency</Link>
-          <Link href="/funding#fiat" className="block underline">View sandbox funding methods</Link>
           {buyError && (
             <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-600">
               {buyError}
@@ -890,11 +886,9 @@ export default function AssetCard({
 
       {connectedAddress && chainId !== polygonAmoy.id && <button className="mt-4 rounded border p-2" onClick={() => switchChain({ chainId: polygonAmoy.id })}>Switch to Polygon Amoy</button>}
       {purchaseHash && <a className="mt-4 block break-all underline" href={`https://amoy.polygonscan.com/tx/${purchaseHash}`} target="_blank" rel="noreferrer">Check purchase transaction status</a>}
-      {isOwner && legacyMarketplaceContracts.map(market => <LegacyListing key={market.address} tokenId={tokenId} marketAddress={market.address} />)}
+      {isOwner && marketsForToken(tokenId).slice(1).map(market => <LegacyListing key={market.address} tokenId={tokenId} marketAddress={market.address} />)}
       {purchaseLookupFailed && <p role="alert">Could not verify existing purchase access. Retry before paying.</p>}
       {purchased === true && <p className="mt-4 text-green-700" role="status">Purchase entitlement verified on-chain.</p>}
-      {verified && connectedAddress && !isOwner && <Web2Checkout key={connectedAddress} tokenId={tokenId} buyer={connectedAddress} canStart={!!isListed && !purchaseLookupFailed && !purchaseLookupPending && !purchased && asset.active} />}
-      {verified && !isOwner && !!isListed && profile?.symbol === "TRNSK" && <AssetFunding tokenId={tokenId} />}
       {verified && <section className="mt-4 space-y-2"><button className="rounded border p-2" onClick={async () => { setAccessError(""); try { setAccess(await api(`/api/assets/${tokenId}/access`)); } catch (err) { setAccessError(err instanceof Error ? err.message : "Access check failed."); } }}>Check my access</button>{access && <><p>{access.access_granted ? "Your license access is verified." : "No active purchase entitlement for your wallet."}</p>{access.download_path && <button className="block text-blue-700 underline" onClick={async () => { setAccessError(""); try { await downloadAsset(access.download_path!); } catch (err) { setAccessError(err instanceof Error ? err.message : "Download failed."); } }}>Download protected file</button>}{access.file_url && <a className="block text-blue-700 underline" target="_blank" rel="noreferrer" href={access.file_url}>Open asset file</a>}<p className="text-xs text-slate-500">{access.storage_notice}</p></>}{accessError && <p role="alert">{accessError}</p>}</section>}
       <AuctionPanel tokenId={tokenId} auctionId={auctionId} price={asset.priceUSDC} canCreate={isOwner && !isListed && asset.active} />
 
@@ -903,11 +897,7 @@ export default function AssetCard({
       ====================================================== */}
 
       {listingHash && (
-        <div className="mt-3 break-all text-xs text-gray-500">
-          Marketplace transaction:
-          <br />
-          {listingHash}
-        </div>
+        <a className="mt-3 block text-sm text-blue-700 underline" href={`https://amoy.polygonscan.com/tx/${listingHash}`} target="_blank" rel="noreferrer">View listing confirmation</a>
       )}
 
       {/* ======================================================
@@ -951,7 +941,7 @@ export default function AssetCard({
               {typeof metadata.domain === "string" && <p><span className="font-medium">Topic:</span> {metadata.domain}</p>}
               {Array.isArray(metadata.tags) && <div className="flex flex-wrap gap-2">{metadata.tags.filter((tag): tag is string => typeof tag === "string").slice(0, 12).map((tag, index) => <span key={index} className="rounded-full bg-white px-3 py-1">{tag}</span>)}</div>}
               <p><span className="font-medium">License:</span> {licenseName(asset.license)}</p>
-              <p><span className="font-medium">Quality:</span> {asset.qualityScore.toString()}/100</p>
+              <p><span className="font-medium">AI assessment:</span> {asset.qualityScore.toString()}/100</p>
             </div>
           )}
 

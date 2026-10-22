@@ -1,5 +1,7 @@
 "use client";
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 import { useKnowledgeAsset, useTotalMinted } from "@/lib/blockchain/useKnowledgeAssets";
 import AssetCard from "@/components/marketplace/AssetCard";
@@ -79,8 +81,9 @@ function AssetItem({
 );
 }
 
-export default function MarketplacePage({ searchParams }: { searchParams?: { mode?: string } }) {
-  const [saleMode, setSaleMode] = useState(searchParams?.mode === "auction" ? "auction" : "all");
+function MarketplaceContent() {
+  const searchParams = useSearchParams();
+  const [saleMode, setSaleMode] = useState(searchParams.get("mode") === "auction" ? "auction" : "all");
   const {
     data: totalMinted,
     isLoading,
@@ -106,6 +109,8 @@ export default function MarketplacePage({ searchParams }: { searchParams?: { mod
   }
 
   const total = Number(totalMinted ?? 0n);
+  const requested = Number(searchParams.get("asset"));
+  const focused = Number.isSafeInteger(requested) && requested > 0 && requested <= total ? requested : null;
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-12">
@@ -116,7 +121,7 @@ export default function MarketplacePage({ searchParams }: { searchParams?: { mod
         </h1>
 
         <p className="mt-2 text-muted-foreground">
-          Discover knowledge assets stored on-chain.
+          Explore ideas, datasets and research. Purchase access with your wallet.
         </p>
       </div>
 
@@ -128,14 +133,15 @@ export default function MarketplacePage({ searchParams }: { searchParams?: { mod
         </div>
       ) : (
         <div className="mt-10">
+          {focused && <Link href="/marketplace" className="mb-6 inline-block text-blue-700 underline">← Browse all assets</Link>}
           <div className="mb-6 flex gap-3" aria-label="Sale mode">
             {[["all", "All"], ["fixed", "Fixed Price"], ["auction", "Auctions"]].map(([value, label]) => <button key={value} aria-pressed={saleMode === value} onClick={() => setSaleMode(value)} className={`rounded border px-4 py-2 ${saleMode === value ? "bg-black text-white" : ""}`}>{label}</button>)}
           </div>
           <div className="peer grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {Array.from(
-            { length: total },
+            { length: focused ? 1 : total },
             (_, index) => {
-              const tokenId = BigInt(index + 1);
+              const tokenId = BigInt(focused ?? index + 1);
 
               return (
                 <AssetItem
@@ -153,4 +159,8 @@ export default function MarketplacePage({ searchParams }: { searchParams?: { mod
 
     </main>
   );
+}
+
+export default function MarketplacePage() {
+  return <Suspense fallback={<main className="p-12" role="status">Loading marketplace…</main>}><MarketplaceContent /></Suspense>;
 }

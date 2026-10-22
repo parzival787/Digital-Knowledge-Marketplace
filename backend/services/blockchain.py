@@ -64,7 +64,7 @@ marketplace = w3.eth.contract(
 )
 
 
-def entitlement_markets():
+def entitlement_markets(token_id=None):
     # Legacy markets retain purchases after a new marketplace becomes active.
     markets = [marketplace]
     seen = {marketplace.address.lower()}
@@ -80,8 +80,10 @@ def entitlement_markets():
         abi = MARKETPLACE_ABI + [{"type": "function", "name": "knowledgeAsset",
             "stateMutability": "view", "inputs": [], "outputs": [{"name": "", "type": "address"}]}]
         legacy = w3.eth.contract(address=address, abi=abi)
-        if w3.eth.chain_id != CHAIN_ID or legacy.functions.knowledgeAsset().call().lower() != KNOWLEDGE_ASSET_ADDRESS.lower():
+        if w3.eth.chain_id != CHAIN_ID or legacy.functions.knowledgeAsset().call().lower() != legacy_registry_address().lower():
             raise ValueError("Legacy marketplace belongs to a different registry or chain")
+        if token_id is not None and not market_token_supported(legacy.address, token_id):
+            continue
         markets.append(legacy)
         seen.add(address.lower())
     return markets
@@ -89,12 +91,12 @@ def entitlement_markets():
 
 def has_purchased(token_id: int, buyer_address: str) -> bool:
     buyer = Web3.to_checksum_address(buyer_address)
-    return any(market.functions.hasPurchased(token_id, buyer).call() for market in entitlement_markets())
+    return any(market.functions.hasPurchased(token_id, buyer).call() for market in entitlement_markets(token_id))
 
 
 def get_purchase_count(token_id: int, buyer_address: str) -> int:
     buyer = Web3.to_checksum_address(buyer_address)
-    return sum(market.functions.purchaseCount(token_id, buyer).call() for market in entitlement_markets())
+    return sum(market.functions.purchaseCount(token_id, buyer).call() for market in entitlement_markets(token_id))
 
 
 KNOWLEDGE_ASSET_ADDRESS = os.getenv(
@@ -137,3 +139,21 @@ def get_knowledge_asset(token_id: int):
 
 
 
+
+
+def legacy_registry_address():
+    previous = os.getenv("LEGACY_KNOWLEDGE_ASSET_ADDRESS")
+    if not previous:
+        return KNOWLEDGE_ASSET_ADDRESS
+    transition = w3.eth.contract(address=knowledge_asset.address, abi=[
+        {"type":"function","name":"legacyRegistry","stateMutability":"view","inputs":[],"outputs":[{"type":"address","name":""}]},
+        {"type":"function","name":"legacyTokenLimit","stateMutability":"view","inputs":[],"outputs":[{"type":"uint256","name":""}]}])
+    if transition.functions.legacyRegistry().call().lower() != previous.lower() or transition.functions.legacyTokenLimit().call() != int(os.environ["LEGACY_TOKEN_LIMIT"]):
+        raise ValueError("Registry transition mismatch")
+    return previous
+
+
+def market_token_supported(address, token_id):
+    return (address.lower() == MARKETPLACE_ADDRESS.lower()
+            or not os.getenv("LEGACY_KNOWLEDGE_ASSET_ADDRESS")
+            or 0 < int(token_id) <= int(os.environ["LEGACY_TOKEN_LIMIT"]))

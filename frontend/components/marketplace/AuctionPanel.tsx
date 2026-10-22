@@ -1,14 +1,14 @@
 "use client";
+import Link from "next/link";
 
 import { useVerifiedWallet } from "@/providers/AuthProvider";
 import { usePaymentCapabilities, marketRouteAvailable } from "@/lib/api/capabilities";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAccount, usePublicClient, useReadContract, useSwitchChain, useWriteContract } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatUnits } from "viem";
 import { polygonAmoy } from "viem/chains";
-import { marketplaceContract, entitlementMarketplaceContracts } from "@/lib/blockchain/contracts";
+import { marketplaceContract, marketsForToken } from "@/lib/blockchain/contracts";
 import { paymentToken, paymentAmount } from "@/lib/blockchain/paymentToken";
 
 import { checkGas, checkUnlisted, confirmedReceipt, PurchaseCheckError } from "@/lib/blockchain/purchaseSafety";
@@ -67,12 +67,13 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price, mar
     if ((action === "bid" || action === "create") && !newPaymentsAvailable) { setError("Marketplace is paused for new bids and auctions."); return; }
     if (!verified) { setError("Log in and verify your connected wallet in Account first."); return; }
     if (!address || !client) { setError("Connect your wallet first."); return; }
+    if (auction && !marketsForToken(auction[0]).some(m => m.address.toLowerCase() === market.address.toLowerCase()) && action !== "refund") { setError("This asset belongs to the previous registry and is outside this catalog."); return; }
     setBusy(true);
     try {
       if (chainId !== polygonAmoy.id) { await switchChainAsync({ chainId: polygonAmoy.id }); }
       async function send(contract: typeof market | typeof mockUSDCContract, functionName: string, args: readonly unknown[]) {
-        await checkGas(client!, contract, functionName, args, address!);
-        const hash = await writeContractAsync({ ...contract, functionName, args, account: address, chainId: polygonAmoy.id });
+        const fees = await checkGas(client!, contract, functionName, args, address!);
+        const hash = await writeContractAsync({ ...fees, ...contract, functionName, args, account: address, chainId: polygonAmoy.id });
         setTransactionHash(hash);
         setStatus("Waiting for transaction confirmation…");
         await confirmedReceipt(client!, hash);
@@ -94,7 +95,7 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price, mar
         let reserveAmount: bigint;
         try { reserveAmount = paymentAmount(reserve, profile.decimals); }
         catch (error) { throw new PurchaseCheckError((error as Error).message); }
-        await checkUnlisted(client, entitlementMarketplaceContracts, tokenId);
+        await checkUnlisted(client, marketsForToken(tokenId), tokenId);
         const duration = Number(hours);
         if (!Number.isInteger(duration) || duration < 1 || duration > 720) throw new PurchaseCheckError("Choose a duration from 1 to 720 hours.");
         const block = await client.getBlock();
@@ -118,7 +119,6 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price, mar
     {marketAddress && marketAddress !== marketplaceContract.address && <p className="break-all text-sm">Previous marketplace: {marketAddress}</p>}
     <h3 className="font-semibold">Auction{resolvedId > 0n ? ` #${resolvedId}` : ""}</h3>
     <p className="text-sm">Every auction transaction needs Amoy test POL for gas. Funding a wallet does not place or reserve a bid.</p>
-    <Link className="block underline" href="/funding#crypto">Fund a bid using another cryptocurrency</Link>
     {isError && <p role="alert">Unable to load auction state.</p>}
     {!!resolvedId && !auction && !isError && <p>Loading auction…</p>}
     {auction && <>

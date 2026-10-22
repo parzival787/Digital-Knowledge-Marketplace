@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
+import { encodeFunctionResult, decodeFunctionResult } from "viem";
 import { checkListing, checkUnlisted, checkGas, confirmedReceipt } from "../lib/blockchain/purchaseSafety.ts";
 
 const contract = { address: "0xmarket", abi: [] };
@@ -15,10 +17,27 @@ function client() {
   return { state, getBlockNumber: async () => 11n,
     readContract: async ({ functionName, blockNumber }) => {
       assert.equal(blockNumber, 11n);
-      return { tokenToListing: state.id, listings: state.listing, getAsset: [0,0,0,0,0,0,state.active], hasPurchased: state.purchased }[functionName];
+      return { tokenToListing: state.id, listings: state.listing, getAsset: { active: state.active }, hasPurchased: state.purchased }[functionName];
     },
   };
 }
+
+test("a live ABI-shaped asset remains purchasable and inactive assets are blocked", async () => {
+  const { abi } = JSON.parse(readFileSync(new URL("../contracts/abi/KnowledgeAsset.json", import.meta.url), "utf8"));
+  const c = client();
+  const read = c.readContract;
+  for (const active of [true, false]) {
+    const result = { ipfsCID: "file", metadataCID: "metadata", priceUSDC: 5n,
+      creator: "0x1111111111111111111111111111111111111111", license: 0, qualityScore: 98, active, mintedAt: 1 };
+    const data = encodeFunctionResult({ abi, functionName: "getAsset", result });
+    const asset = decodeFunctionResult({ abi, functionName: "getAsset", data });
+    assert.equal(asset.active, active);
+    c.readContract = async args => args.functionName === "getAsset" ? asset : read(args);
+    const purchase = checkListing(c, contract, contract, 1n, buyer, 2n, 5n);
+    if (active) await purchase;
+    else await assert.rejects(purchase, /no longer available/);
+  }
+});
 
 test("fresh listing rejects relisting, changed price, cancellation, inactive asset and existing access", async () => {
   for (const change of [s => s.id=3n, s => s.listing[1]=6n, s => s.listing[4]=false, s => s.active=false, s => s.purchased=true]) {
@@ -30,10 +49,15 @@ test("fresh listing rejects relisting, changed price, cancellation, inactive ass
 });
 
 test("gas estimate includes a 20 percent margin and fails before signing", async () => {
-  const c = { estimateContractGas: async () => 100n, estimateFeesPerGas: async () => ({ maxFeePerGas: 2n }), getBalance: async () => 239n };
+  const c = { getChainId: async () => 80002, getBlock: async () => ({ baseFeePerGas: 1n, gasLimit: 40_000_000n }), estimateContractGas: async (args) => { assert.equal(args.maxPriorityFeePerGas, 25_000_000_000n); return 100n; }, estimateFeesPerGas: async () => ({ maxPriorityFeePerGas: 1n, maxFeePerGas: 2n }), getBalance: async () => 120n * 25_000_000_002n - 1n };
   await assert.rejects(checkGas(c, contract, "buyAsset", [2n], buyer), /POL/);
-  c.getBalance = async () => 240n;
-  await checkGas(c, contract, "buyAsset", [2n], buyer);
+  c.getBalance = async () => 120n * 25_000_000_002n;
+  assert.deepEqual(await checkGas(c, contract, "buyAsset", [2n], buyer), { gas: 120n, maxPriorityFeePerGas: 25_000_000_000n, maxFeePerGas: 25_000_000_002n });
+  c.estimateContractGas = async () => 49_000_000n;
+  await assert.rejects(checkGas(c, contract, "mint", [], buyer), /transaction limit/);
+  c.estimateContractGas = async () => 100n;
+  c.getBlock = async () => ({ baseFeePerGas: 1n, gasLimit: 110n });
+  await assert.rejects(checkGas(c, contract, "mint", [], buyer), /transaction limit/);
 });
 
 test("two-block receipt verification rejects reorg, disappearance, revert, shallow depth and replacement", async () => {

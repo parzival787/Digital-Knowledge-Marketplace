@@ -32,6 +32,8 @@ def account_activity(wallet: str, before_block: int | None = None):
             raise ValueError("Activity page is too busy")
         for event in events:
             args = event["args"]
+            if not blockchain.market_token_supported(market.address, args["tokenId"]):
+                continue
             listing = market.functions.listings(args["listingId"]).call()
             selling = listing[2].lower() == wallet.lower()
             buying = args["buyer"].lower() == wallet.lower()

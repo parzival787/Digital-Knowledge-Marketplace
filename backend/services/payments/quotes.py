@@ -68,7 +68,7 @@ def purchase_terms(token_id, buyer):
     listing = read(market.functions.listings(listing_id))
     if not listing_id or listing[0] != token_id or listing[3] != 0 or not listing[4] or listing[2].lower() == buyer.lower():
         raise ValueError("Listing unavailable")
-    if any(read(old.functions.hasPurchased(token_id, buyer)) for old in blockchain.entitlement_markets()):
+    if any(read(old.functions.hasPurchased(token_id, buyer)) for old in blockchain.entitlement_markets(token_id)):
         raise ValueError("Existing entitlement")
     profile = market_profile(w3, market.address, registry.address, market.address, block)
     token, decimals = profile["token_address"], profile["decimals"]

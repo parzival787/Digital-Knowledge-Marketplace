@@ -12,6 +12,8 @@ test("payment parsing keeps exact six/eighteen decimals and rejects rounded bids
   }).outputText,{module,exports:module.exports,require});
   const {paymentAmount} = module.exports;
   assert.equal(paymentAmount("10",6),10000000n);
+  assert.equal(paymentAmount("0.01",6),10000n);
+  assert.equal(paymentAmount("0.29",6),290000n);
   assert.equal(paymentAmount("10.000000000000000001",18),10000000000000000001n);
   for(const [value,decimals] of [["0.0000001",6],["1e18",18],["-1",18],["0",18],[(2n**256n).toString(),0]])
     assert.throws(()=>paymentAmount(value,decimals));

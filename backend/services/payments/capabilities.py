@@ -20,8 +20,10 @@ def chain_routes():
     addresses = [os.environ["MARKETPLACE_ADDRESS"]] + os.getenv("LEGACY_MARKETPLACE_ADDRESSES", "").split(",")
     markets = []
     block = w3.eth.block_number
+    from services import blockchain
+    previous_registry = blockchain.legacy_registry_address()
     for value in dict.fromkeys(a.strip().lower() for a in addresses if a.strip()):
-        markets.append(market_profile(w3, value, os.environ["KNOWLEDGE_ASSET_ADDRESS"],
+        markets.append(market_profile(w3, value, os.environ["KNOWLEDGE_ASSET_ADDRESS"] if value == os.environ["MARKETPLACE_ADDRESS"].lower() else previous_registry,
                                       os.environ["MARKETPLACE_ADDRESS"], block))
     funded = False
     if os.getenv("SETTLEMENT_ENABLED") == "true" and os.getenv("SETTLEMENT_PRIVATE_KEY"):

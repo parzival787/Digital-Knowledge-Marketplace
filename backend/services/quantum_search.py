@@ -1,5 +1,5 @@
-# backend/services/quantum_search.py
-print("LOADING QUANTUM_SEARCH")
+"""Legacy graph experiments plus deterministic production semantic retrieval."""
+import asyncio
 import networkx as nx
 import numpy as np
 import dimod
@@ -38,7 +38,7 @@ def quantum_walk_discover(G: nx.Graph, start_node, steps: int = 3) -> dict:
     row_sums[row_sums == 0] = 1
     A = A / row_sums  # Row-normalize so each row sums to 1
 
-    # Quantum walk: amplitude starts concentrated at the query node
+    # Legacy classical propagation, not unitary quantum evolution.
     psi = np.zeros(n, dtype=complex)
     psi[start_i] = 1.0 + 0j
 
@@ -48,7 +48,7 @@ def quantum_walk_discover(G: nx.Graph, start_node, steps: int = 3) -> dict:
         if norm > 0:
             psi = psi / norm  # Keep normalized (unit length)
 
-    # Probability of "finding" the walker at each node = |amplitude|^2
+    # Squared normalized magnitudes are heuristic graph scores.
     probs = {nodes[i]: float(np.abs(psi[i]) ** 2) for i in range(n)}
     return probs
 
@@ -60,15 +60,14 @@ def qubo_rerank(assets: list, scores: dict, top_k: int = 10) -> list:
 
     ids = [a.get("token_id") or a.get("vector_id") for a in assets]
 
-    # QUBO formulation: minimize negative of relevance
-    # while penalizing co-selection of similar items
+    # Legacy QUBO rewards relevance and penalizes the number of selected pairs.
     Q = {}
     for i in range(n):
         # Diagonal: reward for selecting this item (negative = we want to select it)
         Q[(i, i)] = -scores.get(ids[i], 0)
         for j in range(i + 1, n):
             # Off-diagonal: penalty for selecting two items together
-            # This encourages diversity in the final result set
+            # Constant penalties do not measure semantic diversity.
             Q[(i, j)] = 0.3
 
     # Solve with simulated annealing (classical algorithm, available now on CPU)
@@ -84,30 +83,41 @@ def qubo_rerank(assets: list, scores: dict, top_k: int = 10) -> list:
     return (selected + remaining)[:top_k]
 
 
-async def quantum_enhanced_search(query: str, domain: str = None, max_price: int = None, min_quality: float = 0.4) -> list:
+async def quantum_enhanced_search(query: str, domain: str = None, max_price: float | None = None, min_quality: float = 0.4) -> list:
     from services.embedding import embed_query
     from services.pgvector_client import semantic_search
 
-    # Step 1: Classical semantic search via pgvector (fast, ~20ms)
-    query_vec = embed_query(query)
-    candidates = await semantic_search(query_vec, top_k=20, domain=domain, max_price=max_price, min_quality=min_quality)
+    # Keep the existing entry point; production retrieval is classical, not QAOA/VQC.
+    query_vec = await asyncio.to_thread(embed_query, query)
+    candidates = await semantic_search(query_vec, top_k=60, domain=domain, max_price=max_price,
+                                       min_quality=min_quality, published_only=True)
+    return rank_results(candidates)
 
-    if len(candidates) < 2:
-        return candidates
 
-    # Step 2: Build knowledge graph and run quantum walk
-    G = build_asset_graph(candidates)
-    start = candidates[0].get("token_id") or candidates[0].get("vector_id")
-    qscores = quantum_walk_discover(G, start, steps=3)
-
-    # Merge: 60% semantic similarity + 40% quantum walk score
-    for c in candidates:
-        k = c.get("token_id") or c.get("vector_id")
-        c["quantum_score"] = qscores.get(k, 0)
-        c["final_score"] = 0.6 * c.get("score", 0) + 0.4 * c["quantum_score"]
-
-    candidates.sort(key=lambda x: x["final_score"], reverse=True)
-
-    # Step 3: QUBO diversity optimization – pick best diverse top-10
-    score_map = {(c.get("token_id") or c.get("vector_id")): c["final_score"] for c in candidates}
-    return qubo_rerank(candidates, score_map, top_k=10)
+def rank_results(candidates: list, top_k: int = 10) -> list:
+    """Deduplicate identities, then use deterministic maximum marginal relevance."""
+    unique, tokens, hashes = [], set(), set()
+    for asset in sorted(candidates, key=lambda a: (-a["score"], a["vector_id"])):
+        token, content_hash = asset.get("token_id"), asset.get("blake3_hash")
+        if not token or asset["score"] <= 0 or token in tokens or (content_hash and content_hash in hashes):
+            continue
+        tokens.add(token)
+        if content_hash:
+            hashes.add(content_hash)
+        unique.append(asset)
+    selected = []
+    while unique and len(selected) < top_k:
+        def marginal(asset):
+            vector = np.asarray(asset["embedding"], dtype=float)
+            redundancy = 0.0
+            for previous in selected:
+                other = np.asarray(previous["embedding"], dtype=float)
+                denominator = np.linalg.norm(vector) * np.linalg.norm(other)
+                similarity = float(vector @ other / denominator) if denominator else 0.0
+                redundancy = max(redundancy, similarity)
+            return 0.85 * asset["score"] - 0.15 * redundancy
+        best = max(range(len(unique)), key=lambda i: marginal(unique[i]))
+        selected.append(unique.pop(best))
+    # Catalog output only: embeddings, storage references and fingerprints stay internal.
+    fields = ("vector_id", "token_id", "title", "summary", "domain", "tags", "quality", "price_usdc", "score")
+    return [{key: asset.get(key) for key in fields} for asset in selected]

@@ -4,7 +4,7 @@ import MarketplaceArtifact from "@/contracts/abi/Marketplace.json";
 import RoyaltySplitterArtifact from "@/contracts/abi/RoyaltySplitter.json";
 import MockUSDCArtifact from "@/contracts/abi/MockERC20.json";
 
-import { CONTRACTS, LEGACY_MARKETPLACES } from "@/contracts/addresses";
+import { CONTRACTS, LEGACY_MARKETPLACES, LEGACY_TOKEN_LIMIT } from "@/contracts/addresses";
 
 export const knowledgeAssetContract = {
   address: CONTRACTS.KnowledgeAsset,
@@ -30,3 +30,5 @@ export const legacyMarketplaceContracts = [...new Set(LEGACY_MARKETPLACES)]
   .filter(address => address.toLowerCase() !== marketplaceContract.address.toLowerCase())
   .map(address => ({ address, abi: MarketplaceArtifact.abi as Abi }));
 export const entitlementMarketplaceContracts = [marketplaceContract, ...legacyMarketplaceContracts];
+
+export const marketsForToken = (token: bigint) => LEGACY_TOKEN_LIMIT > 0n && token > LEGACY_TOKEN_LIMIT ? [marketplaceContract] : entitlementMarketplaceContracts;

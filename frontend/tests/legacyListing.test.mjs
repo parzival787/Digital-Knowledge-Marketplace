@@ -16,7 +16,7 @@ test("legacy listing cancellation targets the old market and requires verified s
     if(name==="@/providers/AuthProvider")return {useVerifiedWallet:()=>verified};
     if(name==="@tanstack/react-query")return {useQueryClient:()=>({invalidateQueries:async()=>{}})};
     if(name==="@/lib/blockchain/contracts")return {marketplaceContract:{address:"0xcurrent",abi:[]}};
-    if(name==="@/lib/blockchain/purchaseSafety")return {checkGas:async()=>{},confirmedReceipt:async()=>{}};
+    if(name==="@/lib/blockchain/purchaseSafety")return {checkGas:async()=>({gas:120000n,maxPriorityFeePerGas:25000000000n,maxFeePerGas:45000000000n}),confirmedReceipt:async()=>{}};
     if(name==="wagmi")return {
       useAccount:()=>({address:connected,chainId:80002}),useSwitchChain:()=>({}),usePublicClient:()=>({}),
       useWriteContract:()=>({writeContractAsync:async args=>{writes.push(args);return "0xtx";}}),
@@ -27,7 +27,7 @@ test("legacy listing cancellation targets the old market and requires verified s
   const render=()=>{cursor=0;return module.exports.default({tokenId:1n,marketAddress:old});};
   const button=tree=>tree.props.children.find(child=>child?.type==="button");
   await button(render()).props.onClick();
-  assert.equal(writes.length,1);assert.equal(writes[0].address,old);
+  assert.equal(writes.length,1);assert.equal(writes[0].gas,120000n);assert.equal(writes[0].maxPriorityFeePerGas,25000000000n);assert.equal(writes[0].address,old);
   assert.equal(writes[0].functionName,"cancelListing");assert.equal(writes[0].args[0],7n);
   verified=false;
   const denied=button(render());assert.equal(denied.props.disabled,true);

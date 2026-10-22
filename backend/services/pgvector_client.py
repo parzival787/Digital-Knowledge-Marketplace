@@ -3,6 +3,7 @@ import asyncpg
 import numpy as np
 from pgvector.asyncpg import register_vector
 import uuid
+from decimal import Decimal
 
 
 class DuplicateUploadError(ValueError):
@@ -38,7 +39,7 @@ async def setup_tables():
             tags TEXT[] DEFAULT '{}',
 
             quality FLOAT DEFAULT 0.5,
-            price_usdc INT DEFAULT 5,
+            price_usdc NUMERIC(18,6) DEFAULT 5,
 
             token_id INT,
 
@@ -74,6 +75,17 @@ async def setup_tables():
         """
 
         await conn.execute(create_assets)
+        # Preserve existing whole-dollar values while enabling exact fractional prices.
+        await conn.execute("""
+            DO $$ BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = current_schema() AND table_name = 'knowledge_assets'
+                    AND column_name = 'price_usdc' AND data_type = 'integer') THEN
+                    ALTER TABLE knowledge_assets ALTER COLUMN price_usdc TYPE NUMERIC(18,6)
+                        USING price_usdc::numeric;
+                END IF;
+            END $$;
+        """)
         await conn.execute(create_index)
         await conn.execute(create_reviews)
         await conn.execute("""
@@ -164,7 +176,7 @@ async def insert_embedding(
     domain: str,
     tags: list[str],
     quality: float,
-    price_usdc: int,
+    price_usdc: Decimal | float | int,
     blake3_hash: str,
     embedding: list[float],
     file_cid: str = "",
@@ -210,7 +222,7 @@ async def insert_embedding(
             domain,
             tags,
             quality,
-            price_usdc,
+            Decimal(str(price_usdc)),
             blake3_hash,
             np.array(embedding),
             user_id,
@@ -227,8 +239,9 @@ async def semantic_search(
     query_vec: list,
     top_k: int = 20,
     domain: str = None,
-    max_price: int = None,
+    max_price: float | None = None,
     min_quality: float = 0.4,
+    published_only: bool = False,
 ) -> list:
 
     conn = await get_conn()
@@ -237,6 +250,9 @@ async def semantic_search(
         vec = np.array(query_vec, dtype=np.float32)
 
         where_clauses = ["quality >= $2"]
+        where_clauses.append("embedding IS NOT NULL")
+        if published_only:
+            where_clauses.append("token_id > 0")
         params = [vec, max(0.4, min_quality)]
 
         if domain:
@@ -245,13 +261,15 @@ async def semantic_search(
 
         if max_price is not None:
             where_clauses.append(f"price_usdc <= ${len(params) + 1}")
-            params.append(max_price)
+            params.append(Decimal(str(max_price)))
 
         where_sql = " AND ".join(where_clauses)
 
         top_k = max(1, int(top_k))
 
+        dedup_filter = "WHERE content_rank = 1 AND token_rank = 1" if published_only else ""
         sql = f"""
+        WITH candidates AS (
         SELECT
             vector_id,
             file_cid,
@@ -262,10 +280,19 @@ async def semantic_search(
             quality,
             price_usdc,
             token_id,
-            embedding <=> $1 AS distance
+            summary,
+            blake3_hash,
+            embedding,
+            embedding <=> $1 AS distance,
+            row_number() OVER (PARTITION BY COALESCE(NULLIF(blake3_hash,''), vector_id)
+                ORDER BY embedding <=> $1, vector_id) AS content_rank,
+            row_number() OVER (PARTITION BY COALESCE(token_id::text, vector_id)
+                ORDER BY embedding <=> $1, vector_id) AS token_rank
         FROM knowledge_assets
         WHERE {where_sql}
-        ORDER BY embedding <=> $1
+        )
+        SELECT * FROM candidates {dedup_filter}
+        ORDER BY distance, vector_id
         LIMIT {top_k}
         """
 
@@ -284,6 +311,9 @@ async def semantic_search(
                 "quality": float(r["quality"]),
                 "price_usdc": r["price_usdc"],
                 "token_id": r["token_id"],
+                "summary": r["summary"],
+                "blake3_hash": r["blake3_hash"],
+                "embedding": r["embedding"].to_list(),
             }
             for r in rows
         ]

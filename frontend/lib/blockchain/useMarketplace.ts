@@ -1,9 +1,12 @@
 "use client";
 
 import {
+  useAccount,
+  usePublicClient,
   useReadContract,
   useWriteContract,
 } from "wagmi";
+import { checkGas } from "@/lib/blockchain/purchaseSafety";
 import { polygonAmoy } from "viem/chains";
 
 import {
@@ -62,12 +65,17 @@ export function useListing(listingId: bigint) {
  * the existing listing transaction state.
  */
 export function useMarketplaceWrite() {
+  const client = usePublicClient({ chainId: polygonAmoy.id });
+  const { address: account } = useAccount();
   const nftApproval = useWriteContract();
   const listingWrite = useWriteContract();
   const purchaseWrite = useWriteContract();
 
-  function approveNFT(tokenId: bigint) {
-    nftApproval.writeContract({
+  async function approveNFT(tokenId: bigint) {
+    if (!client || !account) throw new Error("Connect your Amoy wallet first.");
+    const fees = await checkGas(client, knowledgeAssetContract, "approve", [marketplaceContract.address, tokenId], account);
+    return nftApproval.writeContractAsync({
+      ...fees, account,
       chainId: polygonAmoy.id,
       address: knowledgeAssetContract.address,
       abi: knowledgeAssetContract.abi,
@@ -79,7 +87,7 @@ export function useMarketplaceWrite() {
     });
   }
 
-  function listFixedPrice(
+  async function listFixedPrice(
     tokenId: bigint,
     priceUSDC: bigint,
     recipients: {
@@ -87,7 +95,10 @@ export function useMarketplaceWrite() {
       shareBps: number;
     }[]
   ) {
-    listingWrite.writeContract({
+    if (!client || !account) throw new Error("Connect your Amoy wallet first.");
+    const fees = await checkGas(client, marketplaceContract, "listFixedPrice", [tokenId, priceUSDC, recipients], account);
+    return listingWrite.writeContractAsync({
+      ...fees, account,
       chainId: polygonAmoy.id,
       address: marketplaceContract.address,
       abi: marketplaceContract.abi,
@@ -100,15 +111,17 @@ export function useMarketplaceWrite() {
     });
   }
 
-  function buyAsset(listingId: bigint, account: `0x${string}`) {
+  async function buyAsset(listingId: bigint, account: `0x${string}`) {
+  if (!client) throw new Error("Connect your Amoy wallet first.");
+  const fees = await checkGas(client, marketplaceContract, "buyAsset", [listingId], account);
   return purchaseWrite.writeContractAsync({
+    ...fees,
     account,
     chainId: polygonAmoy.id,
     address: marketplaceContract.address,
     abi: marketplaceContract.abi,
     functionName: "buyAsset",
     args: [listingId],
-    gas: 500_000n,
   });
 }
 
@@ -134,10 +147,14 @@ export function useMarketplaceWrite() {
  * MockUSDC approval for marketplace purchases.
  */
 export function useUSDCWrite(tokenAddress: `0x${string}`) {
+  const client = usePublicClient({ chainId: polygonAmoy.id });
   const usdcApproval = useWriteContract();
 
-  function approveMarketplace(amount: bigint, account: `0x${string}`) {
+  async function approveMarketplace(amount: bigint, account: `0x${string}`) {
+    if (!client) throw new Error("Connect your Amoy wallet first.");
+    const fees = await checkGas(client, { address: tokenAddress, abi: mockUSDCContract.abi }, "approve", [marketplaceContract.address, amount], account);
     return usdcApproval.writeContractAsync({
+      ...fees,
       account,
       chainId: polygonAmoy.id,
       address: tokenAddress,

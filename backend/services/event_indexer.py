@@ -126,6 +126,7 @@ def fetch_page(address,start,end):
         if event['event']=='ListingCancelled':
             listing=market.functions.listings(event['args']['listingId']).call(block_identifier=log['blockNumber'])
             args.update(seller=listing[2].lower(),tokenId=str(listing[0]))
+        if 'tokenId' in args and not blockchain.market_token_supported(market.address, args['tokenId']): continue
         accounting=sale_accounting(w3,market,event)
         if accounting: args['seller']=accounting['seller']
         rows.append({'tx_hash':Web3.to_hex(log['transactionHash']),'log_index':log['logIndex'],

@@ -8,6 +8,8 @@ export type AnalyzeResponse = {
     domain?: string;
     tags?: string[];
     quality_score?: number;
+    quality_breakdown?: Record<string, {score: number; reason: string; quote: string}>;
+    quality_scope?: string;
     recommended_price_usdc?: number;
     [key: string]: unknown;
   };
@@ -15,19 +17,19 @@ export type AnalyzeResponse = {
 };
 
 export type UploadIPFSResponse = {
+  quality_score?: number;
   file_cid: string;
   metadata_cid: string;
   vector_id: string;
 };
 
 export type SearchResult = {
+  summary?: string;
   token_id?: number;
   final_score?: number;
   score: number;
   distance?: number;
   vector_id: string;
-  file_cid: string;
-  metadata_cid: string;
   title: string;
   domain: string;
   tags: string[];

@@ -21,8 +21,8 @@ test("old auction reads, approval, bid, finalization and refund target the selec
     if (name === "@/providers/AuthProvider") return { useVerifiedWallet: () => true };
     if (name === "@tanstack/react-query") return { useQueryClient: () => ({ invalidateQueries: async () => {} }) };
     if (name === "next/link") return () => null;
-    if (name === "@/lib/blockchain/contracts") return { marketplaceContract: {address:current,abi:[]}, mockUSDCContract:{address:"0xtoken",abi:[]} };
-    if (name === "@/lib/blockchain/purchaseSafety") return { checkGas:async()=>{}, confirmedReceipt:async()=>{}, PurchaseCheckError:Error };
+    if (name === "@/lib/blockchain/contracts") return { marketsForToken: () => [{address:current,abi:[]},{address:old,abi:[]}], marketplaceContract: {address:current,abi:[]}, mockUSDCContract:{address:"0xtoken",abi:[]} };
+    if (name === "@/lib/blockchain/purchaseSafety") return { checkGas:async()=>({gas:120000n,maxPriorityFeePerGas:25000000000n,maxFeePerGas:45000000000n}), confirmedReceipt:async()=>{}, PurchaseCheckError:Error };
     if (name === "wagmi") return {
       useAccount: () => ({address:buyer,chainId:80002}), useSwitchChain: () => ({}),
       useReadContract: args => { reads.push(args); return {data:args.functionName === "auctions" ? auction : 1n}; },

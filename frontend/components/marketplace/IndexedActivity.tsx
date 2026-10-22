@@ -11,12 +11,12 @@ export default function IndexedActivity(){
   const [data,setData]=useState<History|null>(null),[error,setError]=useState("");
   async function refresh(){try{setData(await api<History>("/api/account/indexed-activity"));setError("");}catch{setError("Could not load indexed history.");}}
   useEffect(()=>{void refresh();},[]);
-  return <section className="space-y-4"><h2 className="text-2xl font-semibold">Confirmed marketplace history</h2><button className="underline" onClick={refresh}>Refresh indexed history</button>{error&&<p role="alert">{error}</p>}
-    {data&&<><p>{data.notice}</p>{data.coverage.map(c=><p key={c.market} className="break-all text-sm">Market {c.market}: {c.state}, blocks {c.deployment_block}–{c.next_block-1}. {c.error}</p>)}
+  return <section className="space-y-4"><h2 className="text-2xl font-semibold">Confirmed marketplace history</h2><button className="underline" onClick={refresh}>Refresh history</button>{error&&<p role="alert">{error}</p>}
+    {data&&<><p>{data.notice}</p><details className="text-sm text-slate-500"><summary className="cursor-pointer">History synchronization details</summary>{data.coverage.map(c=><p key={c.market} className="mt-2">{c.state === "backfilling" ? "Earlier activity is still syncing." : c.state} Blocks {c.deployment_block}–{c.next_block-1}. {c.error ? "Synchronization will retry when the service is available." : ""}</p>)}</details>
       {!data.coverage.length&&<p>History is awaiting its first successful synchronization.</p>}
-      {data.totals.map(t=><div key={t.token} className="rounded border p-4"><p className="break-all">Seller proceeds for token {t.token}</p><p>Gross: {amount(t.token,t.gross)}; platform fee: {amount(t.token,t.fee)}; royalties: {amount(t.token,t.royalties)}; net: {amount(t.token,t.net)}.</p></div>)}
+      {data.totals.map(t=><div key={t.token} className="rounded border p-4"><p className="break-all">Seller proceeds</p><p>Gross: {amount(t.token,t.gross)}; platform fee: {amount(t.token,t.fee)}; royalties: {amount(t.token,t.royalties)}; net: {amount(t.token,t.net)}.</p></div>)}
       <p>Latest 200 matching events. Bid deposits are not counted as sales.</p>
-      {data.events.map(e=><article key={`${e.market}-${e.tx_hash}-${e.log_index}`} className="rounded border p-3"><p>{e.kind} · {e.args.tokenId?`Asset #${e.args.tokenId}`:"Refund / listing"} · Block {e.block}</p>{e.args.amount&&<p>Amount: {marketAmount(e.market,e.args.amount)}</p>}<a className="underline" href={`https://amoy.polygonscan.com/tx/${e.tx_hash}`} target="_blank" rel="noreferrer">View transaction</a></article>)}
+      {data.events.map(e=><article key={`${e.market}-${e.tx_hash}-${e.log_index}`} className="rounded border p-3"><p>{e.kind} · {e.args.tokenId?`Asset #${e.args.tokenId}`:"Refund / listing"}</p>{e.args.amount&&<p>Amount: {marketAmount(e.market,e.args.amount)}</p>}<a className="underline" href={`https://amoy.polygonscan.com/tx/${e.tx_hash}`} target="_blank" rel="noreferrer">View transaction</a></article>)}
     </>}
   </section>;
 }

@@ -15,6 +15,7 @@ export default function ResearchPage() {
     <p className="rounded border bg-amber-50 p-4">Research results do not change listing prices, spend funds or replace the marketplace search model.</p>
     {error && <p role="alert">{error}</p>}{!data&&!error&&<p role="status">Loading measured results…</p>}
     <section className="space-y-3 rounded border p-5"><h2 className="text-2xl font-semibold">QAOA pricing</h2>
+      <p>QAOA means Quantum Approximate Optimization Algorithm. This experiment searches for a price that maximizes revenue under synthetic demand assumptions, and compares it with a classical optimizer.</p>
       {!data?.pricing ? <p>No completed local pricing benchmark is available.</p> : <>
         <p>{data.pricing.dataset}. Demand curves are assumptions, not observed sales.</p>
         <p>Assets evaluated: {data.pricing.summary.assets}. Mean sampled-price revenue gap from the exhaustive optimum: {(data.pricing.summary.mean_qaoa_relative_gap*100).toFixed(2)}%.</p>
@@ -25,6 +26,7 @@ export default function ResearchPage() {
       </>}
     </section>
     <section className="space-y-3 rounded border p-5"><h2 className="text-2xl font-semibold">VQC embeddings</h2>
+      <p>VQC means Variational Quantum Circuit: a circuit with trainable parameters. This experiment tests whether transforming document embeddings through it preserves search relevance compared with the original embeddings and classical compression.</p>
       {!data?.embeddings ? <p>No completed local VQC benchmark is available.</p> : <>
         <p>{data.embeddings.dataset}.</p><p>{data.embeddings.training}.</p>
         <p>384-dimensional embeddings are compressed to four components, passed through a four-qubit trainable circuit, then expanded to 384 dimensions.</p>

@@ -47,7 +47,7 @@ contract KnowledgeAsset is ERC721 {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Minimum listing price, in USDC base units (6 decimals).
-    uint256 public constant MIN_PRICE_USDC = 1_000_000; // 1 USDC
+    uint256 public constant MIN_PRICE_USDC = 10_000; // 0.01 USDC
 
     /// @notice Maximum listing price, in USDC base units (6 decimals).
     uint256 public constant MAX_PRICE_USDC = 100_000_000; // 100 USDC
@@ -90,7 +90,7 @@ contract KnowledgeAsset is ERC721 {
 
     /// @dev Sequential token id counter. Starts at 0; first minted
     ///      token is id 1.
-    uint256 private _tokenIds;
+    uint256 internal _tokenIds;
 
     /// @dev Private so all reads go through `getAsset`, which performs
     ///      an explicit existence check. Use `getAsset(tokenId)` rather
@@ -200,7 +200,7 @@ contract KnowledgeAsset is ERC721 {
     /// @return The asset's stored data.
     function getAsset(
         uint256 tokenId
-    ) external view returns (Asset memory) {
+    ) public view virtual returns (Asset memory) {
 
         if (!_exists(tokenId))
             revert AssetDoesNotExist(tokenId);
