@@ -1,0 +1,82 @@
+{
+  "detailed": {
+    "score": 0.5625,
+    "criteria": {
+      "clarity": {
+        "score": 4,
+        "reason": "The purpose and explanation are clear and coherent.",
+        "quote": "Rainfall measurements were collected daily at ten stations in Pune during June 2024."
+      },
+      "specificity": {
+        "score": 3,
+        "reason": "Concrete variables and units are mentioned, but examples and procedures are not detailed.",
+        "quote": "Each CSV row contains station_id, observation_date and rainfall_mm."
+      },
+      "completeness": {
+        "score": 2,
+        "reason": "Scope and approach are partially described, but outputs and limitations are not fully explained.",
+        "quote": "To reproduce the monthly result, group valid rows by station_id and calculate the arithmetic mean of rainfall_mm."
+      },
+      "evidence": {
+        "score": 0,
+        "reason": "No supporting excerpt supplied. Methods and provenance are not documented, and references are not provided.",
+        "quote": ""
+      }
+    }
+  },
+  "detailed_repeat": {
+    "score": 0.5625,
+    "criteria": {
+      "clarity": {
+        "score": 4,
+        "reason": "The purpose and explanation are clear and coherent.",
+        "quote": "Rainfall measurements were collected daily at ten stations in Pune during June 2024."
+      },
+      "specificity": {
+        "score": 3,
+        "reason": "Concrete variables and units are mentioned, but examples and procedures are not provided.",
+        "quote": "Each CSV row contains station_id, observation_date and rainfall_mm."
+      },
+      "completeness": {
+        "score": 2,
+        "reason": "The scope and approach are described, but outputs and limitations are not fully explained.",
+        "quote": "To reproduce the monthly result, group valid rows by station_id and calculate the arithmetic mean of rainfall_mm."
+      },
+      "evidence": {
+        "score": 0,
+        "reason": "No supporting excerpt supplied. Methods and provenance are not documented, and references are not provided.",
+        "quote": ""
+      }
+    }
+  },
+  "vague": {
+    "score": 0.125,
+    "criteria": {
+      "clarity": {
+        "score": 2,
+        "reason": "The purpose is unclear and the explanation is vague.",
+        "quote": "Our work is excellent and everyone should use it."
+      },
+      "specificity": {
+        "score": 0,
+        "reason": "No supporting excerpt supplied. No concrete variables, units, examples, definitions, or procedures are given.",
+        "quote": ""
+      },
+      "completeness": {
+        "score": 0,
+        "reason": "No supporting excerpt supplied. The scope and approach are not explained, and outputs are not described in detail.",
+        "quote": ""
+      },
+      "evidence": {
+        "score": 0,
+        "reason": "No supporting excerpt supplied. Methods, provenance, references, observations, or limitations are not documented.",
+        "quote": ""
+      }
+    }
+  },
+  "catalog": {
+    "uploads": 23,
+    "linked": 2,
+    "distinct_tokens": 2
+  }
+}
