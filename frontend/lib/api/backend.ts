@@ -1,5 +1,4 @@
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+import { api } from "./client";
 
 export type AnalyzeResponse = {
   success: boolean;
@@ -9,6 +8,8 @@ export type AnalyzeResponse = {
     domain?: string;
     tags?: string[];
     quality_score?: number;
+    quality_breakdown?: Record<string, {score: number; reason: string; quote: string}>;
+    quality_scope?: string;
     recommended_price_usdc?: number;
     [key: string]: unknown;
   };
@@ -16,17 +17,19 @@ export type AnalyzeResponse = {
 };
 
 export type UploadIPFSResponse = {
+  quality_score?: number;
   file_cid: string;
   metadata_cid: string;
   vector_id: string;
 };
 
 export type SearchResult = {
+  summary?: string;
+  token_id?: number;
+  final_score?: number;
   score: number;
   distance?: number;
   vector_id: string;
-  file_cid: string;
-  metadata_cid: string;
   title: string;
   domain: string;
   tags: string[];
@@ -39,106 +42,15 @@ export type SearchResponse = {
   results: SearchResult[];
 };
 
-export async function analyzeAsset(
-  file: File
-): Promise<AnalyzeResponse> {
-  const formData = new FormData();
-
-  formData.append("file", file);
-
-  const response = await fetch(
-    `${BACKEND_URL}/api/analyze`,
-    {
-      method: "POST",
-      body: formData,
-    }
-  );
-
-  if (!response.ok) {
-    const message = await response.text();
-
-    throw new Error(
-      `Analyze failed (${response.status}): ${message}`
-    );
-  }
-
-  return response.json();
+export async function analyzeAsset(file: File): Promise<AnalyzeResponse> {
+  const body = new FormData(); body.append("file", file);
+  return api("/api/analyze", { method: "POST", body });
 }
-
-export async function uploadAssetToIPFS(
-  file: File,
-  metadata: Record<string, unknown>
-): Promise<UploadIPFSResponse> {
-  const formData = new FormData();
-
-  formData.append("file", file);
-  formData.append(
-    "metadata_json",
-    JSON.stringify(metadata)
-  );
-
-  const response = await fetch(
-    `${BACKEND_URL}/api/upload-ipfs`,
-    {
-      method: "POST",
-      body: formData,
-    }
-  );
-
-  if (!response.ok) {
-    const message = await response.text();
-
-    throw new Error(
-      `IPFS upload failed (${response.status}): ${message}`
-    );
-  }
-
-  return response.json();
+export async function uploadAssetToIPFS(file: File, metadata: Record<string, unknown>): Promise<UploadIPFSResponse> {
+  const body = new FormData(); body.append("file", file); body.append("metadata_json", JSON.stringify(metadata));
+  return api("/api/upload-ipfs", { method: "POST", body });
 }
-
-export async function searchAssets(
-  query: string,
-  limit = 5
-): Promise<SearchResponse> {
-  const response = await fetch(
-    `${BACKEND_URL}/api/search`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        query,
-        limit,
-      }),
-    }
-  );
-
-  if (!response.ok) {
-    const message = await response.text();
-
-    throw new Error(
-      `Search failed (${response.status}): ${message}`
-    );
-  }
-
-  return response.json();
+export async function searchAssets(query: string, domain?: string, max_price?: number, min_quality = 0.4): Promise<SearchResponse> {
+  return api("/api/search", { method: "POST", body: JSON.stringify({ query, domain: domain || undefined, max_price, min_quality }) });
 }
-
-export async function checkBackendHealth() {
-  const response = await fetch(
-    `${BACKEND_URL}/health`,
-    {
-      method: "GET",
-      cache: "no-store",
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      `Backend health check failed (${response.status})`
-    );
-  }
-
-  return response.json();
-}
+export async function checkBackendHealth() { return api("/health"); }

@@ -1,0 +1,50 @@
+import { expect } from "chai";
+import { network } from "hardhat";
+const { ethers, networkHelpers } = await network.create();
+
+describe("18-decimal marketplace sandbox", function () {
+  it("preserves legacy licenses and pays exact TRNSK seller proceeds for funded purchases and auctions", async function () {
+    const [admin,seller,buyer,bidder,treasury,recorder] = await ethers.getSigners();
+    const asset=await ethers.deployContract("KnowledgeAsset");
+    const six=await ethers.deployContract("MockERC20",["MockUSDC","MockUSDC",6]);
+    const eighteen=await ethers.deployContract("MockERC20",["TRNSK fixture","TRNSK",18]);
+    const oldSplitter=await ethers.deployContract("RoyaltySplitter",[await six.getAddress(),treasury.address,500]);
+    const oldMarket=await ethers.deployContract("Marketplace",[await asset.getAddress(),await oldSplitter.getAddress(),await six.getAddress()]);
+    await oldSplitter.updateMarketplace(await oldMarket.getAddress());
+    const splitter=await ethers.deployContract("RoyaltySplitter",[await eighteen.getAddress(),treasury.address,500]);
+    const market=await ethers.deployContract("Marketplace",[await asset.getAddress(),await splitter.getAddress(),await eighteen.getAddress()]);
+    await splitter.updateMarketplace(await market.getAddress());
+    await asset.connect(seller).getFunction("mint")("file","metadata",10_000_000n,1,90);
+    await oldMarket.connect(seller).getFunction("listFixedPrice")(1,10_000_000n,[]);
+    await six.mint(buyer.address,10_000_000n);await six.connect(buyer).getFunction("approve")(await oldMarket.getAddress(),10_000_000n);
+    await oldMarket.connect(buyer).getFunction("buyAsset")(1);
+    expect(await oldMarket.hasPurchased(1,buyer.address)).to.equal(true);
+    const price=10n**19n+1n;
+    await market.connect(seller).getFunction("listFixedPrice")(1,price,[]);
+    await eighteen.mint(admin.address,price);await eighteen.approve(await market.getAddress(),price);
+    const reference=ethers.id("trnsk-funded-order");await market.buyAssetFor(1,bidder.address,price,reference);
+    expect(await eighteen.balanceOf(seller.address)).to.equal(price-price*500n/10000n);
+    expect(await asset.ownerOf(1)).to.equal(seller.address);
+    expect(await oldMarket.hasPurchased(1,buyer.address)).to.equal(true);
+    expect(await market.hasPurchased(1,buyer.address)).to.equal(false);
+    await market.connect(seller).getFunction("listFixedPrice")(1,price,[]);
+    await expect(market.buyAssetFor(2,bidder.address,price,reference)).to.be.revertedWithCustomError(market,"PaymentAlreadySettled");
+    await market.connect(seller).getFunction("cancelListing")(2);
+    await asset.connect(seller).getFunction("mint")("file2","metadata2",10_000_000n,1,90);
+    const now=await networkHelpers.time.latest();
+    await market.connect(seller).getFunction("createAuction")(2,price,now,now+100,[]);
+    for(const payer of [buyer,bidder]) {await eighteen.mint(payer.address,price+1n);await eighteen.connect(payer).getFunction("approve")(await market.getAddress(),price+1n);}
+    await market.connect(buyer).getFunction("placeBid")(1,price);
+    await market.connect(bidder).getFunction("placeBid")(1,price+1n);
+    expect(await market.pendingRefunds(buyer.address)).to.equal(price);
+    await market.connect(buyer).getFunction("withdrawRefund")();
+    expect(await eighteen.balanceOf(buyer.address)).to.equal(price+1n);
+    await networkHelpers.time.increaseTo(now+101);await market.endAuction(1);
+    expect(await eighteen.balanceOf(seller.address)).to.equal(price-price*500n/10000n+(price+1n)-(price+1n)*500n/10000n);
+    expect(await market.hasPurchased(2,bidder.address)).to.equal(true);
+    const registry=await ethers.deployContract("PaymentReceiptRegistry",[recorder.address,true]);
+    expect(await registry.sandbox()).to.equal(true);
+    expect(await registry.hasRole(await registry.RECORDER_ROLE(),admin.address)).to.equal(false);
+    expect(await market.hasPurchased(2,buyer.address)).to.equal(false);
+  });
+});

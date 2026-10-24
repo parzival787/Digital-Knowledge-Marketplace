@@ -1,16 +1,18 @@
 from services.quantum_hash import quantum_hash
+from services import pgvector_client as db
 
 
 class QuantumFraudDetector:
-    def __init__(self):
-        # Track file hashes to detect exact duplicates
-        self.seen_hashes: set = set()
-
-    def check_upload(self, file_bytes: bytes, embedding: list = None) -> dict:
+    async def check_upload(self, file_bytes: bytes, embedding: list = None) -> dict:
         content_hash = quantum_hash(file_bytes)
 
         # Check 1: Exact duplicate (same file, byte for byte)
-        if content_hash in self.seen_hashes:
+        conn = await db.get_conn()
+        try:
+            exists = await conn.fetchval("SELECT EXISTS(SELECT 1 FROM knowledge_assets WHERE blake3_hash=$1)", content_hash)
+        finally:
+            await conn.close()
+        if exists:
             return {
                 "is_fraud": True,
                 "reason": "Exact duplicate file detected. This file has already been uploaded.",
@@ -25,14 +27,11 @@ class QuantumFraudDetector:
                 "content_hash": content_hash,
             }
 
-        # Passed all checks - record the hash
-        self.seen_hashes.add(content_hash)
-
         return {
             "is_fraud": False,
             "content_hash": content_hash,
         }
 
 
-# Single instance shared across all requests
+# Reads persisted uploads; failed storage attempts do not reserve a hash.
 fraud_detector = QuantumFraudDetector()

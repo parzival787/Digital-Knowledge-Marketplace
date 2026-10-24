@@ -45,17 +45,22 @@ def test_blake3_hashing():
     print(f"BLAKE3 hash: {h1[:16]}...")
 
 
-def test_fraud_detector():
+@pytest.mark.asyncio
+async def test_fraud_detector():
     detector = QuantumFraudDetector()
 
     # More than 100 bytes to pass the size check
     data = b"Some dataset content here. " * 10
 
-    result1 = detector.check_upload(data)
+    from unittest.mock import AsyncMock, patch
+    conn = AsyncMock()
+    conn.fetchval.side_effect = [False, True]
+    with patch("services.pgvector_client.get_conn", return_value=conn):
+        result1 = await detector.check_upload(data)
+        result2 = await QuantumFraudDetector().check_upload(data)
 
     assert not result1["is_fraud"]
 
-    result2 = detector.check_upload(data)
 
     assert result2["is_fraud"]
     assert "duplicate" in result2["reason"].lower()

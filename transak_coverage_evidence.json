@@ -1,0 +1,108 @@
+{
+  "verified": true,
+  "environment": "staging",
+  "checked_at": 1791793081.597354,
+  "fiat": [
+    {
+      "symbol": "USD",
+      "methods": [
+        {
+          "id": "credit_debit_card",
+          "name": "Card Payment",
+          "buy": true,
+          "sell": true,
+          "minimum": "5",
+          "maximum": "3000"
+        },
+        {
+          "id": "apple_pay",
+          "name": "Apple Pay",
+          "buy": true,
+          "sell": false,
+          "minimum": "30",
+          "maximum": "1000"
+        },
+        {
+          "id": "google_pay",
+          "name": "Google Pay",
+          "buy": true,
+          "sell": false,
+          "minimum": "30",
+          "maximum": "1000"
+        },
+        {
+          "id": "pm_wire",
+          "name": "Wire Transfer",
+          "buy": true,
+          "sell": false,
+          "minimum": "20",
+          "maximum": "75000"
+        }
+      ]
+    },
+    {
+      "symbol": "EUR",
+      "methods": [
+        {
+          "id": "credit_debit_card",
+          "name": "Card Payment",
+          "buy": true,
+          "sell": true,
+          "minimum": "4",
+          "maximum": "5360"
+        },
+        {
+          "id": "apple_pay",
+          "name": "Apple Pay",
+          "buy": true,
+          "sell": false,
+          "minimum": "27",
+          "maximum": "2680"
+        },
+        {
+          "id": "google_pay",
+          "name": "Google Pay",
+          "buy": true,
+          "sell": false,
+          "minimum": "27",
+          "maximum": "2680"
+        }
+      ]
+    }
+  ],
+  "sandbox_route": [
+    {
+      "symbol": "USDC",
+      "network": "polygon",
+      "buy": true,
+      "sell": true,
+      "excluded_fiat": []
+    }
+  ],
+  "limitation": "Runtime lookup using localhost IP; final user eligibility and hosted checkout still require verification.",
+  "buy_quote_probe": {
+    "fiatCurrency": "USD",
+    "cryptoCurrency": "USDC",
+    "network": "polygon",
+    "isBuyOrSell": "BUY",
+    "paymentMethod": "credit_debit_card",
+    "quote_id": "9be9e606-bd6b-4b5f-81b4-85bb907e6647",
+    "fetched_at": 1791793083.5427494,
+    "freshness_seconds": 60,
+    "environment": "staging",
+    "fiatAmount": "11.46",
+    "cryptoAmount": "10",
+    "totalFee": "1.46",
+    "conversionPrice": "1",
+    "fees": [
+      {
+        "name": "Transak fee",
+        "amount": "1.46"
+      },
+      {
+        "name": "Third Party fee",
+        "amount": "0"
+      }
+    ]
+  }
+}

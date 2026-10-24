@@ -1,0 +1,30 @@
+{
+  "chain_id": 80002,
+  "sandbox": true,
+  "verified_block": 49976691,
+  "existing_code_hashes": {
+    "0x2C16409A3db9880f9A70e71B5b131A17db533Fc9": "0x319f966900573fae97f9e540caee894fdc7c849e65718ba1cc595810140148de",
+    "0xDe7bdacb8B3ff631dbcdb09C81c0de7421475A5d": "0xfab6ae532846c5be66fa4c04f1cac1d7b2b83d9b11ad2fd4a8a5a98bfca7100d",
+    "0x43cE72CEd667bDe9252044451b07ecA1aec2D300": "0x34141118fe8180ee62b3b5363181afd8c5d88fe9ca4cbaa5f4ecb1dcaebc4b68",
+    "0x0bd22C54F90E7309dd5e7e73270Ac72d4cD74719": "0x992b54cf69299451cffaf8cd99c478e263ef6e3632c9be5b08bec43485bd4ee3",
+    "0x0c86A754A29714C4Fe9C6F1359fa7099eD174c0b": "0x3205e942cbe00e85143b3a494a4edbff5f27813f3cc89163dacad76242037a05"
+  },
+  "preserved": {
+    "knowledge_asset": "0x2C16409A3db9880f9A70e71B5b131A17db533Fc9",
+    "marketplace": "0xDe7bdacb8B3ff631dbcdb09C81c0de7421475A5d",
+    "splitter": "0x43cE72CEd667bDe9252044451b07ecA1aec2D300",
+    "token": "0x0bd22C54F90E7309dd5e7e73270Ac72d4cD74719"
+  },
+  "token": {
+    "address": "0x0c86A754A29714C4Fe9C6F1359fa7099eD174c0b",
+    "symbol": "TRNSK",
+    "decimals": 18
+  },
+  "roles": {
+    "treasury": "0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66",
+    "admin": "0x733368FEb00BEF70c1DB14bd621CeAAd5f32DF44",
+    "settlement": "0x8359df64b16F1A1f9Fe78B2337Af8Fb6A30F44cf",
+    "recorder": "0x8f6Dd1d94bfBFae37b0Ac3291b5aBFcceC345b21"
+  },
+  "platform_fee_bps": 500
+}

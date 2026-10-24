@@ -1,0 +1,57 @@
+"use client";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api/client";
+import { useAuth } from "@/providers/AuthProvider";
+
+export default function AuthForm({ signup = false }: { signup?: boolean }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [googleAvailable, setGoogleAvailable] = useState<boolean | null>(null);
+  useEffect(() => {
+    api<{google: boolean}>("/api/auth/methods").then(value => setGoogleAvailable(value.google)).catch(() => setGoogleAvailable(false));
+    if (new URLSearchParams(window.location.search).has("google_error")) {
+      setError("Google sign-in was cancelled, expired or could not be verified. Please try again.");
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
+  const { refresh } = useAuth();
+  const router = useRouter();
+  async function googleLogin() {
+    setBusy(true); setError("");
+    try {
+      const result = await api<{url: string}>("/api/auth/google/start", {method: "POST"});
+      window.location.assign(result.url);
+    } catch (err) { setError(err instanceof Error ? err.message : "Google sign-in is unavailable."); setBusy(false); }
+  }
+  async function submit(event: React.FormEvent) {
+    event.preventDefault(); setError("");
+    if (signup && password !== confirm) { setError("Passwords do not match."); return; }
+    setBusy(true);
+    try {
+      await api(`/api/auth/${signup ? "signup" : "login"}`, { method: "POST", body: JSON.stringify({ username, password }) });
+      await refresh(); router.replace("/dashboard");
+    } catch (err) { setError(err instanceof Error ? err.message : "Unable to sign in."); }
+    finally { setBusy(false); }
+  }
+  return <main className="mx-auto grid max-w-5xl gap-10 px-6 py-16 md:grid-cols-2">
+    <section className="rounded-2xl bg-slate-950 p-8 text-white"><Link href="/" className="mb-6 block text-sm text-blue-300 underline">Back to welcome</Link><p className="text-sm uppercase tracking-widest text-blue-300">DKM / Your workspace</p><h1 className="mt-6 text-4xl font-bold">{signup ? "Start sharing knowledge." : "Welcome back."}</h1><p className="mt-6 text-slate-300">Create an account or log in to open your personal workspace.</p><p className="mt-6 text-sm text-slate-400">All marketplace and creator tools are available after you sign in.</p></section>
+    <form onSubmit={submit} className="space-y-5 rounded-2xl border p-8">
+      <h2 className="text-2xl font-semibold">{signup ? "Create an account" : "Log in"}</h2>
+      <button type="button" onClick={googleLogin} disabled={busy || !googleAvailable} className="w-full rounded-lg border border-slate-300 bg-white p-3 font-medium text-slate-800 disabled:opacity-50">Continue with Google</button>
+      {googleAvailable === false && <p className="text-sm text-slate-500">Google sign-in is awaiting setup. You can use a password below.</p>}
+      <p className="text-center text-sm text-slate-500">or continue with a password</p>
+      <label className="block">Username<input className="mt-2 w-full rounded-lg border p-3" autoComplete="username" required minLength={3} maxLength={40} pattern="[a-zA-Z0-9_]{3,40}" value={username} onChange={e => setUsername(e.target.value)} /></label>
+      <p className="text-xs text-slate-500">3–40 letters, numbers or underscores.</p>
+      <label className="block">Password<input type="password" className="mt-2 w-full rounded-lg border p-3" autoComplete={signup ? "new-password" : "current-password"} required minLength={12} maxLength={128} value={password} onChange={e => setPassword(e.target.value)} /></label>
+      {signup && <><p className="text-xs text-slate-500">Use at least 12 characters. Save it securely; password recovery is not configured.</p><label className="block">Confirm password<input type="password" autoComplete="new-password" required className="mt-2 w-full rounded-lg border p-3" value={confirm} onChange={e => setConfirm(e.target.value)} /></label></>}
+      {error && <p role="alert" className="text-red-700">{error}</p>}
+      <button disabled={busy} className="w-full rounded-lg bg-blue-600 p-3 font-semibold text-white disabled:opacity-50">{busy ? "Please wait…" : signup ? "Sign up" : "Log in"}</button>
+      <p className="text-sm">{signup ? "Already registered?" : "New to DKM?"} <Link className="text-blue-700 underline" href={signup ? "/login" : "/signup"}>{signup ? "Log in" : "Create an account"}</Link></p>
+    </form>
+  </main>;
+}

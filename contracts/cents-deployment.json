@@ -1,0 +1,117 @@
+{
+  "status": "verified",
+  "chain_id": 80002,
+  "deployer": "0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66",
+  "legacy_registry": "0x2C16409A3db9880f9A70e71B5b131A17db533Fc9",
+  "legacy_marketplace": "0xDe7bdacb8B3ff631dbcdb09C81c0de7421475A5d",
+  "legacy_splitter": "0x43cE72CEd667bDe9252044451b07ecA1aec2D300",
+  "token": "0x0bd22C54F90E7309dd5e7e73270Ac72d4cD74719",
+  "legacy_token_limit": 6,
+  "snapshots": [
+    {
+      "id": 1,
+      "owner": "0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66",
+      "asset": [
+        "bafkreibghwewp53o6esvj7632oiykyiys5gads3hamcd5pmjamsiias3na",
+        "bafkreicobw7i5pjny3j7xkxes7435cbewwen4wpqgdpc6ntfm7hbld54qa",
+        "10000000",
+        "0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66",
+        "0",
+        "80",
+        "true",
+        "1787420533"
+      ]
+    },
+    {
+      "id": 2,
+      "owner": "0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66",
+      "asset": [
+        "bafkreifmon6w4sxh5jcxlujhv47ojdmtxarxbuhzkdo33odfpfusyvggru",
+        "bafkreiejsb7erbsrqwihi5gtnlsv23crbwijijptatmg7eenva3muf3zl4",
+        "1000000",
+        "0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66",
+        "0",
+        "75",
+        "true",
+        "1787421189"
+      ]
+    },
+    {
+      "id": 3,
+      "owner": "0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66",
+      "asset": [
+        "bafkreifmon6w4sxh5jcxlujhv47ojdmtxarxbuhzkdo33odfpfusyvggru",
+        "bafkreiejsb7erbsrqwihi5gtnlsv23crbwijijptatmg7eenva3muf3zl4",
+        "1000000",
+        "0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66",
+        "0",
+        "75",
+        "true",
+        "1787421244"
+      ]
+    },
+    {
+      "id": 4,
+      "owner": "0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66",
+      "asset": [
+        "bafybeico27wj5uu6iwsg3y55tzjk2gdxke4zd75yy2ughqqhw7uitsmlfq",
+        "bafkreiatwd5gde4ginbr2glatymrt442vxdsdsi647v6s2sgsqsjwofpee",
+        "1000000",
+        "0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66",
+        "0",
+        "15",
+        "true",
+        "1788422855"
+      ]
+    },
+    {
+      "id": 5,
+      "owner": "0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66",
+      "asset": [
+        "bafybeicb4xdy4nd4gvbccak4ok3atqvj63vjohlqux2ojhpwb35ohw3a2i",
+        "bafkreie6vn5djhlyzfbivjucfev4nj2sxiitnn35stmtm4rdwdkd5c3ykq",
+        "5000000",
+        "0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66",
+        "0",
+        "99",
+        "true",
+        "1788425444"
+      ]
+    },
+    {
+      "id": 6,
+      "owner": "0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66",
+      "asset": [
+        "bafkreiexs4xfezvhjvnbcj5ul4vvrt52xgmeqm2wpf3v4nmalq2minp5va",
+        "bafkreihioq5eilkfkfmagal5kiybs3mtrxh2nqfe7pjn7z2kygwzc5jy3q",
+        "1000000",
+        "0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66",
+        "0",
+        "98",
+        "true",
+        "1792214726"
+      ]
+    }
+  ],
+  "contracts": {
+    "KnowledgeAssetSuccessor": {
+      "address": "0xCA6f1E6C08Dddda08e4288B8eFE07bF54f67AeD7",
+      "transaction_hash": "0x2fe415ffc7327254b7c5e0b2ed38ec3550b0150b654100ab7ded68490504357e",
+      "block": 50751707,
+      "code_hash": "0xca3bc40e09d4aeecfee1a0d48156a3ba68e350ba12180f424c79b5b85c9cdc4e"
+    },
+    "RoyaltySplitter": {
+      "address": "0x36CAa5b59825a378664E75b5EFB30988F71901c0",
+      "transaction_hash": "0xd806dd8b5378fcfbb19b2d4afd69b3af992db45420161a5471b78e8a060dc0d9",
+      "block": 50751712,
+      "code_hash": "0x15ee1596eb98814a94bb65cdee1d448efae235dbe7c7be6c2e9468b68f4d2cfe"
+    },
+    "Marketplace": {
+      "address": "0xc1cfA63fDA41cD1Ee76B24F1D1B2b993661a67A5",
+      "transaction_hash": "0x92c86d7ebe5ec80407274858f42cc7ac6b08fc950feaaa0ba3b1dcc665ca7bbb",
+      "block": 50751718,
+      "code_hash": "0xa83ab5986f6a6c6b9942d1df8f8a3fa268a8a6ecd2a58cfd3ec514764a6b3a3a"
+    }
+  },
+  "wiring_transaction": "0xcce9190088144d5473997591f6678b5529cfaa05470396b4258760362c7d2540"
+}

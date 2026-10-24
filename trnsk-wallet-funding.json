@@ -1,0 +1,16 @@
+{
+  "chain_id": 80002,
+  "sender": "0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66",
+  "recipient": "0x733368FEb00BEF70c1DB14bd621CeAAd5f32DF44",
+  "role": "admin",
+  "amount_test_POL": "1",
+  "nonce": 32,
+  "transaction_hash": "0x9bb1e646cbc52c1705da0054a1ff90b343c49f04396cbd7eb11dd89f9ed4d71a",
+  "state": "confirmed",
+  "created_utc": "2026-10-14T06:39:52.466648+00:00",
+  "block": 50137465,
+  "gas_used": 21000,
+  "recipient_test_POL": "1",
+  "sender_remaining_test_POL": "0.279408267386467689",
+  "confirmations": 38
+}

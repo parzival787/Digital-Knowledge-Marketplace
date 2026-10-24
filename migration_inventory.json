@@ -1,0 +1,82 @@
+{
+  "captured_at": "2026-10-12T08:02:36.270364+00:00",
+  "chain_id": 80002,
+  "block": 49969644,
+  "block_hash": "0xf1bb93a9aa87b151c7d0d655e6f8877b641475422bac17d0d27dd091e201da5e",
+  "knowledge_asset": "0x2C16409A3db9880f9A70e71B5b131A17db533Fc9",
+  "frontend_backend_match": true,
+  "legacy_marketplaces": [],
+  "markets": [
+    {
+      "address": "0xDe7bdacb8B3ff631dbcdb09C81c0de7421475A5d",
+      "splitter": "0x43cE72CEd667bDe9252044451b07ecA1aec2D300",
+      "token": "0x0bd22C54F90E7309dd5e7e73270Ac72d4cD74719",
+      "listings": [
+        {
+          "id": 1,
+          "token_id": "1",
+          "price": "10000000",
+          "seller": "0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66",
+          "sale_type": 0,
+          "active": true,
+          "seller_cancellation_required_before_relisting": true
+        },
+        {
+          "id": 2,
+          "token_id": "3",
+          "price": "1000000",
+          "seller": "0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66",
+          "sale_type": 0,
+          "active": true,
+          "seller_cancellation_required_before_relisting": true
+        },
+        {
+          "id": 3,
+          "token_id": "2",
+          "price": "1000000",
+          "seller": "0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66",
+          "sale_type": 0,
+          "active": true,
+          "seller_cancellation_required_before_relisting": true
+        },
+        {
+          "id": 4,
+          "token_id": "4",
+          "price": "1000000",
+          "seller": "0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66",
+          "sale_type": 0,
+          "active": true,
+          "seller_cancellation_required_before_relisting": true
+        },
+        {
+          "id": 5,
+          "token_id": "5",
+          "price": "5000000",
+          "seller": "0x9202BfF93f8A46f7D9BAe982CB1c021e34E8dc66",
+          "sale_type": 0,
+          "active": true,
+          "seller_cancellation_required_before_relisting": true
+        }
+      ],
+      "auctions": [],
+      "known_entitlements": [],
+      "refund_balances": [
+        {
+          "wallet": "0x9202bff93f8a46f7d9bae982cb1c021e34e8dc66",
+          "amount": "0"
+        }
+      ]
+    }
+  ],
+  "index_coverage": [
+    {
+      "market": "0xde7bdacb8b3ff631dbcdb09c81c0de7421475a5d",
+      "deployment_block": 45927547,
+      "next_block": 45942202,
+      "state": "backfilling"
+    }
+  ],
+  "all_historical_buyers_enumerated": false,
+  "limitation": "Entitlement mappings cannot enumerate unknown buyers; indexed history must finish before migration sign-off. This inventory includes known account/event/auction wallets.",
+  "deployment_authorized": false
+}

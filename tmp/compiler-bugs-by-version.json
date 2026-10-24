@@ -1,0 +1,30 @@
+{
+  "0.8.20": {
+    "bugs": [
+      "MemoryByteArrayElementDeleteClearsWholeWord",
+      "SpillSlotCollisionAcrossMutualRecursion",
+      "UnsoundSpillInMutualRecursion",
+      "LostStorageArrayWriteOnSlotOverflow",
+      "VerbatimInvalidDeduplication",
+      "FullInlinerNonExpressionSplitArgumentEvaluationOrder",
+      "MissingSideEffectsOnSelectorAccess"
+    ],
+    "released": "2023-05-10"
+  },
+  "0.8.30": {
+    "bugs": [
+      "MisorderedNamedParametersInRequireWithCustomErrors",
+      "MemoryByteArrayElementDeleteClearsWholeWord",
+      "SpillSlotCollisionAcrossMutualRecursion",
+      "InheritanceOrderReversalOnStorageEndWarning",
+      "UnsoundSpillInMutualRecursion",
+      "TransientStorageClearingHelperCollision",
+      "LostStorageArrayWriteOnSlotOverflow"
+    ],
+    "released": "2025-05-07"
+  },
+  "0.8.37": {
+    "bugs": [],
+    "released": "2026-09-10"
+  }
+}

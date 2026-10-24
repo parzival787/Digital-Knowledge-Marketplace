@@ -12,6 +12,7 @@
   },
   "include": [
     "./test",
-    "./hardhat.config.ts"
+    "./hardhat.config.ts",
+    "./scripts/deploy-trnsk-sandbox.ts"
   ]
 }

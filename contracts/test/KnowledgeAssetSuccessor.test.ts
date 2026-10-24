@@ -1,0 +1,48 @@
+import { expect } from "chai";
+import { network } from "hardhat";
+
+describe("One-cent registry transition", function () {
+  it("preserves legacy reads and licenses, separates later legacy mints, and settles a cent purchase", async function () {
+    const { ethers } = await network.connect();
+    const [seller, buyer, other] = await ethers.getSigners();
+    const old: any = await ethers.deployContract("KnowledgeAsset");
+    await old.mint("old-file", "old-meta", 1_000_000n, 0, 80);
+    const token: any = await ethers.deployContract("MockERC20", ["Test", "TEST", 6]);
+    const split: any = await ethers.deployContract("RoyaltySplitter", [await token.getAddress(), seller.address, 500]);
+    const oldMarket: any = await ethers.deployContract("Marketplace", [await old.getAddress(), await split.getAddress(), await token.getAddress()]);
+    await split.updateMarketplace(await oldMarket.getAddress());
+    await token.mint(buyer.address, 2_000_000n);
+    await oldMarket.listFixedPrice(1, 1_000_000n, []);
+    await token.connect(buyer).approve(await oldMarket.getAddress(), 1_000_000n);
+    await oldMarket.connect(buyer).buyAsset(1);
+    const next: any = await ethers.deployContract("KnowledgeAssetSuccessor", [await old.getAddress()]);
+    expect(await next.legacyTokenLimit()).to.equal(1n);
+    expect(await next.ownerOf(1)).to.equal(seller.address);
+    expect((await next.getAsset(1)).ipfsCID).to.equal("old-file");
+    expect(await next.tokenURI(1)).to.equal(await old.tokenURI(1));
+    await old.updatePrice(1, 2_000_000n);
+    expect((await next.getAsset(1)).priceUSDC).to.equal(2_000_000n);
+    await next.approve(other.address, 1);
+    expect(await next.getApproved(1)).to.equal(other.address);
+    await next.mint("cent-file", "cent-meta", 10_000n, 0, 75);
+    await old.connect(other).mint("later-old-file", "later-old-meta", 1_000_000n, 0, 80);
+    expect(await next.totalMinted()).to.equal(2n);
+    expect((await next.getAsset(2)).ipfsCID).to.equal("cent-file");
+    expect(await next.ownerOf(2)).to.equal(seller.address);
+    expect(await next.balanceOf(seller.address)).to.equal(2n);
+    expect(await next.balanceOf(other.address)).to.equal(0n);
+    await expect(next.transferFrom(seller.address, buyer.address, 1)).to.be.revertedWithCustomError(next, "NonTransferable");
+    await expect(next.mint("bad", "bad", 9_999n, 0, 75)).to.be.revertedWithCustomError(next, "PriceTooLow");
+    const nextSplit: any = await ethers.deployContract("RoyaltySplitter", [await token.getAddress(), seller.address, 500]);
+    const nextMarket: any = await ethers.deployContract("Marketplace", [await next.getAddress(), await nextSplit.getAddress(), await token.getAddress()]);
+    await nextSplit.updateMarketplace(await nextMarket.getAddress());
+    await nextMarket.listFixedPrice(2, 10_000n, []);
+    await token.connect(buyer).approve(await nextMarket.getAddress(), 10_000n);
+    const before = await token.balanceOf(buyer.address);
+    await nextMarket.connect(buyer).buyAsset(1);
+    expect(await token.balanceOf(buyer.address)).to.equal(before - 10_000n);
+    expect(await nextMarket.hasPurchased(2, buyer.address)).to.equal(true);
+    expect(await oldMarket.hasPurchased(1, buyer.address)).to.equal(true);
+    expect(await old.ownerOf(1)).to.equal(seller.address);
+  });
+});

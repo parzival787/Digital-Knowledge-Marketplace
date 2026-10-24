@@ -36,8 +36,9 @@ def _extract_from_pdf(data: bytes) -> str:
                 if len(text) >= 4000:
                     break
 
-    except Exception as e:
-        text = f"PDF extraction failed: {e}"
+    except Exception:
+        # Never assess extraction errors as if they were document content.
+        return ""
 
     return text[:4000]
 

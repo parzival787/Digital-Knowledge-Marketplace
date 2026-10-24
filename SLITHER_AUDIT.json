@@ -1,0 +1,129 @@
+{
+  "initial": {
+    "success": true,
+    "counts": {
+      "Medium": 5,
+      "Low": 7,
+      "Informational": 1
+    },
+    "findings": [
+      {
+        "check": "reentrancy-no-eth",
+        "impact": "Medium",
+        "confidence": "Medium",
+        "description": "Reentrancy in Marketplace.placeBid(uint256,uint256) (contracts/Marketplace.sol#623-699):\n\tExternal calls:\n\t- usdc.safeTransferFrom(msg.sender,address(this),amount) (contracts/Marketplace.sol#663-667)\n\tState variables written after the call(s):\n\t- auction.highestBid = amount (contracts/Marketplace.sol#683)\n\tMarketplace.auctions (contracts/Marketplace.sol#185) can be used in cross function reentrancies:\n\t- Marketplace.auctionExists(uint256) (contracts/Marketplace.sol#897-905)\n\t- Marketplace.auctions (contracts/Marketplace.sol#185)\n\t- Marketplace.isAuctionActive(uint256) (contracts/Marketplace.sol#879-892)\n\t- auction.highestBidder = msg.sender (contracts/Marketplace.sol#684)\n\tMarketplace.auctions (contracts/Marketplace.sol#185) can be used in cross function reentrancies:\n\t- Marketplace.auctionExists(uint256) (contracts/Marketplace.sol#897-905)\n\t- Marketplace.auctions (contracts/Marketplace.sol#185)\n\t- Marketplace.isAuctionActive(uint256) (contracts/Marketplace.sol#879-892)\n"
+      },
+      {
+        "check": "uninitialized-local",
+        "impact": "Medium",
+        "confidence": "Medium",
+        "description": "RoyaltySplitter._validateRecipients(address,IRoyaltySplitter.RoyaltyRecipient[]).totalShares (contracts/RoyaltySplitter.sol#280) is a local variable never initialized\n"
+      },
+      {
+        "check": "uninitialized-local",
+        "impact": "Medium",
+        "confidence": "Medium",
+        "description": "RoyaltySplitter.distributeRoyalty(address,IRoyaltySplitter.RoyaltyRecipient[],uint256).recipientsPaid (contracts/RoyaltySplitter.sol#382) is a local variable never initialized\n"
+      },
+      {
+        "check": "uninitialized-local",
+        "impact": "Medium",
+        "confidence": "Medium",
+        "description": "Marketplace.listFixedPrice(uint256,uint256,IRoyaltySplitter.RoyaltyRecipient[]).totalShares (contracts/Marketplace.sol#354) is a local variable never initialized\n"
+      },
+      {
+        "check": "uninitialized-local",
+        "impact": "Medium",
+        "confidence": "Medium",
+        "description": "Marketplace.createAuction(uint256,uint256,uint256,uint256,IRoyaltySplitter.RoyaltyRecipient[]).totalShares (contracts/Marketplace.sol#560) is a local variable never initialized\n"
+      },
+      {
+        "check": "reentrancy-benign",
+        "impact": "Low",
+        "confidence": "Medium",
+        "description": "Reentrancy in Marketplace.endAuction(uint256) (contracts/Marketplace.sol#727-797):\n\tExternal calls:\n\t- usdc.safeTransfer(address(royaltySplitter),auction.highestBid) (contracts/Marketplace.sol#769-772)\n\t- royaltySplitter.distributeRoyalty(auction.seller,auctionRecipients[auctionId],auction.highestBid) (contracts/Marketplace.sol#778-782)\n\tState variables written after the call(s):\n\t- purchaseCount[auction.tokenId][auction.highestBidder] += 1 (contracts/Marketplace.sol#790)\n"
+      },
+      {
+        "check": "reentrancy-benign",
+        "impact": "Low",
+        "confidence": "Medium",
+        "description": "Reentrancy in Marketplace.placeBid(uint256,uint256) (contracts/Marketplace.sol#623-699):\n\tExternal calls:\n\t- usdc.safeTransferFrom(msg.sender,address(this),amount) (contracts/Marketplace.sol#663-667)\n\tState variables written after the call(s):\n\t- auctionBids[auctionId].push(Bid({amount:amount,bidder:msg.sender,timestamp:uint40(block.timestamp)})) (contracts/Marketplace.sol#686-692)\n\t- pendingRefunds[auction.highestBidder] += auction.highestBid (contracts/Marketplace.sol#675-676)\n"
+      },
+      {
+        "check": "reentrancy-benign",
+        "impact": "Low",
+        "confidence": "Medium",
+        "description": "Reentrancy in Marketplace._buyAsset(uint256,address) (contracts/Marketplace.sol#458-511):\n\tExternal calls:\n\t- usdc.safeTransferFrom(msg.sender,address(royaltySplitter),price) (contracts/Marketplace.sol#489-493)\n\t- royaltySplitter.distributeRoyalty(seller,listingRecipients[listingId],price) (contracts/Marketplace.sol#495-499)\n\tState variables written after the call(s):\n\t- purchaseCount[tokenId][buyer] += 1 (contracts/Marketplace.sol#503)\n"
+      },
+      {
+        "check": "timestamp",
+        "impact": "Low",
+        "confidence": "Medium",
+        "description": "Marketplace.listingExists(uint256) (contracts/Marketplace.sol#864-872) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- listings[listingId].tokenId != 0 (contracts/Marketplace.sol#871)\n"
+      },
+      {
+        "check": "timestamp",
+        "impact": "Low",
+        "confidence": "Medium",
+        "description": "Marketplace.listFixedPrice(uint256,uint256,IRoyaltySplitter.RoyaltyRecipient[]) (contracts/Marketplace.sol#321-395) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- existingListing != 0 && listings[existingListing].active (contracts/Marketplace.sol#340)\n"
+      },
+      {
+        "check": "timestamp",
+        "impact": "Low",
+        "confidence": "Medium",
+        "description": "Marketplace.placeBid(uint256,uint256) (contracts/Marketplace.sol#623-699) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- block.timestamp < auction.startTime (contracts/Marketplace.sol#639)\n\t- block.timestamp >= auction.endTime (contracts/Marketplace.sol#642)\n"
+      },
+      {
+        "check": "timestamp",
+        "impact": "Low",
+        "confidence": "Medium",
+        "description": "Marketplace.endAuction(uint256) (contracts/Marketplace.sol#727-797) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- block.timestamp < auction.endTime (contracts/Marketplace.sol#742)\n"
+      },
+      {
+        "check": "solc-version",
+        "impact": "Informational",
+        "confidence": "High",
+        "description": "Version constraint ^0.8.20 contains known severe issues (https://solidity.readthedocs.io/en/latest/bugs.html)\n\t- VerbatimInvalidDeduplication\n\t- FullInlinerNonExpressionSplitArgumentEvaluationOrder\n\t- MissingSideEffectsOnSelectorAccess.\nIt is used by:\n\t- ^0.8.20 (contracts/KnowledgeAsset.sol#2)\n\t- ^0.8.20 (contracts/Marketplace.sol#2)\n\t- ^0.8.20 (contracts/MockERC20.sol#2)\n\t- ^0.8.20 (contracts/RoyaltySplitter.sol#2)\n\t- ^0.8.20 (contracts/interfaces/IKnowledgeAsset.sol#2)\n\t- ^0.8.20 (contracts/interfaces/IMarketplace.sol#2)\n\t- ^0.8.20 (contracts/interfaces/IRoyaltySplitter.sol#2)\n"
+      }
+    ]
+  },
+  "final": {
+    "success": true,
+    "counts": {
+      "Low": 4,
+      "Informational": 1
+    },
+    "findings": [
+      {
+        "check": "timestamp",
+        "impact": "Low",
+        "confidence": "Medium",
+        "description": "Marketplace.listingExists(uint256) (contracts/Marketplace.sol#851-859) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- listings[listingId].tokenId != 0 (contracts/Marketplace.sol#858)\n"
+      },
+      {
+        "check": "timestamp",
+        "impact": "Low",
+        "confidence": "Medium",
+        "description": "Marketplace.placeBid(uint256,uint256) (contracts/Marketplace.sol#622-691) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- block.timestamp < auction.startTime (contracts/Marketplace.sol#638)\n\t- block.timestamp >= auction.endTime (contracts/Marketplace.sol#641)\n"
+      },
+      {
+        "check": "timestamp",
+        "impact": "Low",
+        "confidence": "Medium",
+        "description": "Marketplace.endAuction(uint256) (contracts/Marketplace.sol#719-784) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- block.timestamp < auction.endTime (contracts/Marketplace.sol#734)\n"
+      },
+      {
+        "check": "timestamp",
+        "impact": "Low",
+        "confidence": "Medium",
+        "description": "Marketplace.listFixedPrice(uint256,uint256,IRoyaltySplitter.RoyaltyRecipient[]) (contracts/Marketplace.sol#321-395) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- existingListing != 0 && listings[existingListing].active (contracts/Marketplace.sol#340)\n"
+      },
+      {
+        "check": "solc-version",
+        "impact": "Informational",
+        "confidence": "High",
+        "description": "Version constraint ^0.8.20 contains known severe issues (https://solidity.readthedocs.io/en/latest/bugs.html)\n\t- VerbatimInvalidDeduplication\n\t- FullInlinerNonExpressionSplitArgumentEvaluationOrder\n\t- MissingSideEffectsOnSelectorAccess.\nIt is used by:\n\t- ^0.8.20 (contracts/KnowledgeAsset.sol#2)\n\t- ^0.8.20 (contracts/Marketplace.sol#2)\n\t- ^0.8.20 (contracts/MockERC20.sol#2)\n\t- ^0.8.20 (contracts/RoyaltySplitter.sol#2)\n\t- ^0.8.20 (contracts/interfaces/IKnowledgeAsset.sol#2)\n\t- ^0.8.20 (contracts/interfaces/IMarketplace.sol#2)\n\t- ^0.8.20 (contracts/interfaces/IRoyaltySplitter.sol#2)\n"
+      }
+    ]
+  }
+}
