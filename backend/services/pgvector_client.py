@@ -9,13 +9,12 @@ from decimal import Decimal
 class DuplicateUploadError(ValueError):
     pass
 
-DB_URL = os.environ.get(
-    "DATABASE_URL",
-    "postgresql://postgres:devpassword@localhost:5432/dkm"
-)
+DB_URL = os.environ.get("DATABASE_URL")
 
 
 async def get_conn():
+    if not DB_URL:
+        raise ValueError("DATABASE_URL must be configured")
     conn = await asyncpg.connect(DB_URL)
     await register_vector(conn)
     return conn

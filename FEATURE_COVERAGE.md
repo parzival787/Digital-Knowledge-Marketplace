@@ -1,5 +1,7 @@
 # Backend to frontend coverage
 
+Current scope (2026-10-24): the frontend is wallet-only. Provider-related rows below describe retained API/component capabilities and historical integration work, not enabled UPI/card checkout. `/funding` redirects to the marketplace. Purchases use the deployed Amoy mock token; no live INR conversion is claimed. Auctions accept 2 minutes to 720 hours. Downloads prefer the configured dedicated Pinata gateway.
+
 ## Where to use each feature
 
 | Feature / API | Frontend | Access and state |
@@ -16,7 +18,7 @@
 | Search, `/api/search` | `/search` | Public; query, domain and price filters; results link to marketplace assets |
 | Account uploads and payments | `/dashboard` | Server filters by account ID; latest 100 records per list |
 | Asset access, `/api/assets/{token_id}/access` | Marketplace → Check my access | Uses session's verified wallet; no caller-supplied identity; includes creator access |
-| Payment create, read, confirm, settle | Marketplace → UPI/Card checkout; `/dashboard` | Account-owned orders; callbacks authenticated; entitlement requires chain settlement |
+| Payment create, read, confirm, settle | Retained backend/provider components; not enabled in the wallet-only checkout | Account-owned orders; callbacks authenticated; entitlement requires chain settlement |
 | Latest checkout recovery | Marketplace asset checkout | Restored from the server per account/token, including across browsers |
 | Health and capabilities | `/status` | Public; indicates setup availability and unavailable payment options |
 | Fixed-price Web3 purchases | `/marketplace` | Verified account wallet; USDC approval, receipt checking, chain enforcement |

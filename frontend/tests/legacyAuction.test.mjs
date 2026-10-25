@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url);
 
 test("old auction reads, approval, bid, finalization and refund target the selected market", async () => {
   const old = "0x" + "11".repeat(20), current = "0x" + "22".repeat(20), buyer = "0x" + "33".repeat(20);
-  const writes = [], reads = [], state = [2n, "5", "24", "", "", false, null, 1];
+  const writes = [], reads = [], state = [2n, "5", "24", "hours", "", "", false, null, 1];
   let cursor = 0;
   const module = { exports: {} };
   const auction = [1n, 1000000n, 0n, current, current, true, false, 0, 100];
@@ -18,6 +18,13 @@ test("old auction reads, approval, bid, finalization and refund target the selec
     if (name === "react") return { useEffect() {}, useState() { const i=cursor++; return [state[i], v => state[i]=v]; } };
     if (name === "@/lib/api/capabilities") return { usePaymentCapabilities: () => ({data:{markets:[{address:old,token_address:current,decimals:6,symbol:"MockUSDC",paused:false}]},isError:false}), marketRouteAvailable: () => true };
     if (name === "@/lib/blockchain/paymentToken") return {paymentToken:profile=>({address:profile.token_address,abi:[]}),paymentAmount:(value,decimals)=>require("viem").parseUnits(value,decimals)};
+    if (name === "@/lib/blockchain/auctionDuration") {
+      const durationModule = { exports: {} };
+      vm.runInNewContext(ts.transpileModule(readFileSync(new URL("../lib/blockchain/auctionDuration.ts", import.meta.url), "utf8"), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+      }).outputText, { module: durationModule, exports: durationModule.exports });
+      return durationModule.exports;
+    }
     if (name === "@/providers/AuthProvider") return { useVerifiedWallet: () => true };
     if (name === "@tanstack/react-query") return { useQueryClient: () => ({ invalidateQueries: async () => {} }) };
     if (name === "next/link") return () => null;
@@ -41,7 +48,7 @@ test("old auction reads, approval, bid, finalization and refund target the selec
   await find(render(),"Place bid").props.onClick();
   assert.equal(writes[0].functionName,"approve"); assert.equal(writes[0].args[0],old);
   assert.equal(writes[1].functionName,"placeBid"); assert.equal(writes[1].address,old);
-  state[7]=101;
+  state[8]=101;
   await find(render(),"Finalize auction").props.onClick();
   await find(render(),"Withdraw bid refund").props.onClick();
   assert.equal(writes[2].functionName,"endAuction"); assert.equal(writes[2].address,old);

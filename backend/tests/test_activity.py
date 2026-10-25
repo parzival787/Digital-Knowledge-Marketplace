@@ -9,6 +9,7 @@ class ActivityTests(unittest.TestCase):
         w3.eth.chain_id = 80002
         w3.eth.block_number = 5002
         market = w3.eth.contract.return_value
+        market.address = activity.blockchain.MARKETPLACE_ADDRESS
         wallet = "0x" + "11" * 20
         other = "0x" + "22" * 20
         third = "0x" + "33" * 20
@@ -18,7 +19,7 @@ class ActivityTests(unittest.TestCase):
             {"args":{"listingId":3,"tokenId":12,"buyer":third,"amount":8000000},"blockNumber":4700,"transactionHash":bytes(32),"logIndex":2},
         ]
         market.functions.listings.side_effect = lambda listing: MagicMock(call=lambda: (0,0,wallet if listing == 2 else other))
-        with patch.object(activity.blockchain,"w3",w3), patch.dict("os.environ", {"RPC_LOG_PAGE_SIZE":"2000"}):
+        with patch.object(activity.blockchain,"w3",w3), patch.object(activity.blockchain,"entitlement_markets",return_value=[market]), patch.dict("os.environ", {"RPC_LOG_PAGE_SIZE":"2000"}):
             result = activity.account_activity(wallet)
         self.assertEqual([row["kind"] for row in result["activity"]],["sale","purchase"])
         self.assertEqual(result["next_before_block"],3000)

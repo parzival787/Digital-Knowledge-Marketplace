@@ -14,7 +14,7 @@ checks=[
         'tests.test_recording','tests.test_recording_sources','tests.test_indexer',
         'tests.test_receipts','tests.test_activity','tests.test_legacy_access','tests.test_positions',
         'tests.test_capabilities','tests.test_quotes','tests.test_market_profiles','tests.test_token_delivery',
-        'tests.test_asset_funding','tests.test_sale_payouts','tests.test_transak_discovery','tests.test_research_results','-q'],root/'backend'),
+        'tests.test_asset_funding','tests.test_sale_payouts','tests.test_transak_discovery','tests.test_research_results','test_ipfs_gateway','-q'],root/'backend'),
     ('frontend-regressions',['node','--test',*[str(p) for p in sorted((root/'frontend/tests').glob('*.test.mjs'))]],root/'frontend'),
     ('frontend-build',['cmd','/c','npm','run','build'],root/'frontend'),
     ('contracts',['cmd','/c','node_modules\\.bin\\hardhat.cmd','test'],root/'contracts'),

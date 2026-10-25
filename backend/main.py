@@ -9,6 +9,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Prefer the account gateway: public gateways can require browser challenges.
+from services.ipfs_gateway import ipfs_gateways
+
 from services.text_extractor import extract_text
 from services.asset_price import asset_price
 from services.llm_enrichment import enrich_document, AnalysisUnavailable
@@ -471,7 +474,7 @@ async def download_asset(token_id: int, user=Depends(wallet_user)):
     if not row or not re.fullmatch(r"[A-Za-z0-9]{20,100}", asset["ipfs_cid"]):
         raise HTTPException(503, "Protected file is unavailable")
     async with httpx.AsyncClient(timeout=30) as client:
-        for gateway in ("https://ipfs.io/ipfs/", "https://gateway.pinata.cloud/ipfs/"):
+        for gateway in ipfs_gateways():
             try:
                 async with client.stream("GET", gateway + asset["ipfs_cid"]) as response:
                     response.raise_for_status()
@@ -523,7 +526,7 @@ async def asset_details(token_id: int):
         return asset_description(dict(row))
     if re.fullmatch(r"[A-Za-z0-9]{20,100}", cid):
         async with httpx.AsyncClient(timeout=8) as client:
-            for gateway in ("https://ipfs.io/ipfs/", "https://gateway.pinata.cloud/ipfs/"):
+            for gateway in ipfs_gateways():
                 try:
                     async with client.stream("GET", gateway + cid) as response:
                         response.raise_for_status()

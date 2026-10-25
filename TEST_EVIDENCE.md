@@ -1,3 +1,7 @@
+# Merge validation - 2026-10-25
+
+87 backend tests passed after isolating activity/positions fixtures from local legacy deployment configuration; includes dedicated gateway validation. 23 frontend regressions, production build, 131 contract tests and contract typecheck passed. Staged secret-value scan found zero matches; environment files/private backups excluded. README links resolve and the PDF matches its staged bytes. Asset 10 dedicated-gateway retrieval returned HTTP 200 and AES-GCM/BLAKE3 verification passed (511,962 bytes). No new browser E2E or public auction was executed.
+
 ## Latest TRNSK acceptance — 2026-10-12
 
 - Consolidated acceptance_results.json: 82 backend tests, 15 frontend regressions,

@@ -1,57 +1,59 @@
-# Sample Hardhat 3 Project (`node:test` and `viem`)
+# contracts
 
-This project showcases a Hardhat 3 project using the native Node.js test runner (`node:test`) and the `viem` library for Ethereum interactions.
+Active Solidity project using Hardhat 3 with the Mocha/ethers toolbox and OpenZeppelin. Run `npm ci`, `npx hardhat test` and `npx tsc --noEmit` here. Source compiler is 0.8.37. Deployment scripts send public transactions: do not execute them as startup or test commands. The successor preserves legacy registrations 1-6; new registrations start at 7. Marketplace purchases grant access without transferring the registration NFT. See `cents-deployment.json` for the recorded current deployment and read AGENTS.md before contract changes.
 
-To learn more about Hardhat 3, please visit the [Getting Started guide](https://hardhat.org/docs/getting-started#getting-started-with-hardhat-3). To share your feedback, join our [Hardhat 3](https://hardhat.org/hardhat3-telegram-group) Telegram group or [open an issue](https://github.com/NomicFoundation/hardhat/issues/new) in our GitHub issue tracker.
+## Files
 
-## Project Overview
+### [.gitignore](.gitignore)
 
-This example project includes:
+Repository/tooling metadata controlling ignores, linting or project behavior; not user-facing application logic.
 
-- A simple Hardhat configuration file.
-- Foundry-compatible Solidity unit tests.
-- TypeScript integration tests using [`node:test`](nodejs.org/api/test.html), the new Node.js native test runner, and [`viem`](https://viem.sh/).
-- Examples demonstrating how to connect to different types of networks, including locally simulating OP mainnet.
+### [AGENTS.md](AGENTS.md)
 
-## Usage
+Developer/agent workflow instructions and tooling guidance; not executed as an application feature.
 
-### Running Tests
+### [CLAUDE.md](CLAUDE.md)
 
-To run all the tests in the project, execute the following command:
+Developer/agent workflow instructions and tooling guidance; not executed as an application feature.
 
-```shell
-npx hardhat test
-```
+### [cents-deployment.json](cents-deployment.json)
 
-You can also selectively run the Solidity or `node:test` tests:
+Current Amoy successor deployment receipts, original-state snapshot and wiring verification.
 
-```shell
-npx hardhat test solidity
-npx hardhat test nodejs
-```
+### [deployment.json](deployment.json)
 
-### Make a deployment to Sepolia
+Earlier deployment record; compare with the current cents manifest before using addresses.
 
-This project includes an example Ignition module to deploy the contract. You can deploy this module to a locally simulated chain or to Sepolia.
+### [hardhat.compiler-review.config.ts](hardhat.compiler-review.config.ts)
 
-To run the deployment to a local chain:
+Build/runtime/tooling configuration for hardhat.compiler-review.config. Review this alongside its package manifest; secrets are deliberately excluded.
 
-```shell
-npx hardhat ignition deploy ignition/modules/Counter.ts
-```
+### [hardhat.config.ts](hardhat.config.ts)
 
-To run the deployment to Sepolia, you need an account with funds to send the transaction. The provided Hardhat configuration includes a Configuration Variable called `SEPOLIA_PRIVATE_KEY`, which you can use to set the private key of the account you want to use.
+Build/runtime/tooling configuration for hardhat.config. Review this alongside its package manifest; secrets are deliberately excluded.
 
-You can set the `SEPOLIA_PRIVATE_KEY` variable using the `hardhat-keystore` plugin or by setting it as an environment variable.
+### [package-lock.json](package-lock.json)
 
-To set the `SEPOLIA_PRIVATE_KEY` config variable using `hardhat-keystore`:
+Dependency lockfile: exact resolved dependency graph and integrity metadata. Used for reproducible installation; not application business logic.
 
-```shell
-npx hardhat keystore set SEPOLIA_PRIVATE_KEY
-```
+### [package.json](package.json)
 
-After setting the variable, you can run the deployment with the Sepolia network:
+Node package manifest: scripts and direct dependencies. Version ranges are not necessarily the versions resolved in the lockfile.
 
-```shell
-npx hardhat ignition deploy --network sepolia ignition/modules/Counter.ts
-```
+### [pnpm-lock.yaml](pnpm-lock.yaml)
+
+Dependency lockfile: exact resolved dependency graph and integrity metadata. Used for reproducible installation; not application business logic.
+
+### [pnpm-workspace.yaml](pnpm-workspace.yaml)
+
+Build/runtime/tooling configuration for pnpm-workspace. Review this alongside its package manifest; secrets are deliberately excluded.
+
+### [tsconfig.json](tsconfig.json)
+
+Structured tsconfig configuration/evidence. Its existence alone is not live-state proof.
+
+## Subdirectories
+
+- [contracts](contracts/README.md)
+- [scripts](scripts/README.md)
+- [test](test/README.md)

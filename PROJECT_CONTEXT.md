@@ -1,5 +1,25 @@
 # DKM continuation — 2026-09-30
 
+## Documentation, short auctions and dedicated gateway — 2026-10-24
+
+Auction UI accepts whole minutes or hours from 2 minutes through 720 hours;
+duration conversion/boundary and legacy-auction tests pass. Existing deployed
+contract already accepts endTime > startTime; no deployment required.
+Protected downloads and metadata now prefer PINATA_GATEWAY, a validated
+dedicated mypinata.cloud hostname, with verified TLS and public fallbacks.
+Asset 10 was fetched from the configured dedicated gateway (HTTP 200),
+decrypted with AES-GCM and verified with BLAKE3 (511,962 bytes). This was a
+backend retrieval/integrity check, not a new browser-session download test.
+Public gateways had returned 429/browser challenges; earlier network TLS
+interception was also observed. Never disable TLS verification to fix this.
+Added an Amoy-only preview-by-default test-token mint CLI. Two authorized
+mints confirmed at blocks 51007183 and 51007199 (+5 and +3 test USDC).
+User explicitly approved full upload reset after backup: 30 knowledge_assets
+rows were deleted; accounts/payment history and on-chain state were preserved.
+Private database backup is Git-excluded. Later asset 10 has its new key record.
+Main and directory READMEs now document source files and routes; temporary
+PDF-rendering PNGs are removed, final reports and evidence retained.
+
 ## Mint recovery and cancellation — 2026-10-21
 
 Dashboard labels resume as requiring no code; token-ID linking is now advanced

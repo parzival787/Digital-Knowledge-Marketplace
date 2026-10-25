@@ -23,7 +23,7 @@ class PositionTests(unittest.TestCase):
         eth=Mock(chain_id=80002,block_number=12)
         eth.get_block.return_value=SimpleNamespace(hash=bytes(32),timestamp=10)
         eth.contract.side_effect=lambda address,abi:asset if address==asset_address else markets[address]
-        with patch.object(positions.blockchain,'w3',SimpleNamespace(eth=eth)),patch.object(positions.blockchain,'knowledge_asset',asset),patch.object(positions.blockchain,'entitlement_markets',return_value=list(markets.values())):
+        with patch.object(positions.blockchain,'w3',SimpleNamespace(eth=eth)),patch.object(positions.blockchain,'knowledge_asset',asset),patch.object(positions.blockchain,'MARKETPLACE_ADDRESS',current),patch.object(positions.blockchain,'legacy_registry_address',return_value=asset_address),patch.object(positions.blockchain,'entitlement_markets',return_value=list(markets.values())):
             result=positions.snapshot(wallet,0)
             self.assertEqual(result['entitlements'],[{'market':legacy,'token_id':'1','purchase_count':'1'}])
             self.assertEqual(len(result['listings']),2)

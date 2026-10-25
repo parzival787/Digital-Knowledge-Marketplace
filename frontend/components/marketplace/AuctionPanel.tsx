@@ -10,6 +10,7 @@ import { formatUnits } from "viem";
 import { polygonAmoy } from "viem/chains";
 import { marketplaceContract, marketsForToken } from "@/lib/blockchain/contracts";
 import { paymentToken, paymentAmount } from "@/lib/blockchain/paymentToken";
+import { auctionDurationSeconds } from "@/lib/blockchain/auctionDuration";
 
 import { checkGas, checkUnlisted, confirmedReceipt, PurchaseCheckError } from "@/lib/blockchain/purchaseSafety";
 
@@ -39,7 +40,8 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price, mar
     functionName: "pendingRefunds", args: [address], query: { enabled: !!address, refetchInterval: 10000 } });
   const auction = data as Auction | undefined;
   const [bid, setBid] = useState("");
-  const [hours, setHours] = useState("24");
+  const [duration, setDuration] = useState("24");
+  const [durationUnit, setDurationUnit] = useState<"minutes" | "hours">("hours");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -96,10 +98,11 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price, mar
         try { reserveAmount = paymentAmount(reserve, profile.decimals); }
         catch (error) { throw new PurchaseCheckError((error as Error).message); }
         await checkUnlisted(client, marketsForToken(tokenId), tokenId);
-        const duration = Number(hours);
-        if (!Number.isInteger(duration) || duration < 1 || duration > 720) throw new PurchaseCheckError("Choose a duration from 1 to 720 hours.");
+        let durationSeconds: bigint;
+        try { durationSeconds = auctionDurationSeconds(duration, durationUnit); }
+        catch (error) { throw new PurchaseCheckError((error as Error).message); }
         const block = await client.getBlock();
-        await send(market, "createAuction", [tokenId, reserveAmount, block.timestamp, block.timestamp + BigInt(duration * 3600), []]);
+        await send(market, "createAuction", [tokenId, reserveAmount, block.timestamp, block.timestamp + durationSeconds, []]);
       } else {
         await send(market, action === "end" ? "endAuction" : "withdrawRefund", action === "end" ? [resolvedId] : []);
       }
@@ -138,7 +141,9 @@ export default function AuctionPanel({ tokenId, auctionId, canCreate, price, mar
       <p>Reference price: {formatUnits(price, 6)} USDC. No co-author royalties.</p>
       <label className="block">Reserve price ({profile?.symbol})<input className="w-full rounded border p-2" inputMode="decimal" value={reserve} onChange={event => { setReserve(event.target.value); setReserveConfirmed(false); }} /></label>
       <label className="block"><input type="checkbox" checked={reserveConfirmed} onChange={event => setReserveConfirmed(event.target.checked)} /> I confirm {reserve} {profile?.symbol} as the reserve price.</label>
-      <label className="block">Duration (hours)<input className="mt-1 w-full rounded border p-2" type="number" min="1" max="720" value={hours} onChange={e => setHours(e.target.value)} /></label>
+      <label className="block">Duration<input className="mt-1 w-full rounded border p-2" type="number" min={durationUnit === "minutes" ? 2 : 1} max={durationUnit === "minutes" ? 43200 : 720} step="1" value={duration} onChange={e => setDuration(e.target.value)} /></label>
+      <label className="block">Duration unit<select className="mt-1 w-full rounded border p-2" value={durationUnit} onChange={e => setDurationUnit(e.target.value as "minutes" | "hours")}><option value="minutes">Minutes</option><option value="hours">Hours</option></select></label>
+      <p className="text-sm">Choose 2 minutes to 720 hours (30 days). Short auctions may end while wallet transactions are confirming.</p>
       <button className="rounded border px-3 py-2 disabled:opacity-50" disabled={busy || !newPaymentsAvailable || !reserveConfirmed} onClick={() => transact("create")}>Create auction</button>
     </>}
     {(refund as bigint | undefined ?? 0n) > 0n && <>

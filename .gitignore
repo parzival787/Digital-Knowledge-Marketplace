@@ -43,3 +43,12 @@ Thumbs.db
 # Secrets
 # =========================
 api keys.txt
+
+# Local reports, database backups and investigation output
+output/private-backups/
+tmp/**/*.png
+tmp/**/*.jpg
+tmp/**/*.log
+tmp/report-review*
+tmp/paper6-*
+contracts /

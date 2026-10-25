@@ -1,31 +1,37 @@
 {
-  "started_utc": "2026-10-12T08:16:25.260542+00:00",
+  "started_utc": "2026-10-24T15:03:27.696682+00:00",
   "scope": "local automated checks; provider/chain boundaries simulated in backend tests; no interactive E2E claim",
   "checks": [
     {
       "check": "backend",
       "exit_code": 0,
-      "seconds": 103.61
+      "seconds": 99.721,
+      "tests": 87,
+      "rerun_log": "tmp/acceptance/backend-final.log"
     },
     {
       "check": "frontend-regressions",
       "exit_code": 0,
-      "seconds": 1.97
+      "seconds": 6.99,
+      "tests": 23
     },
     {
       "check": "frontend-build",
       "exit_code": 0,
-      "seconds": 21.82
+      "seconds": 83.83
     },
     {
       "check": "contracts",
       "exit_code": 0,
-      "seconds": 4.79
+      "seconds": 17.39,
+      "tests": 131
     },
     {
       "check": "contract-types",
       "exit_code": 0,
-      "seconds": 0.46
+      "seconds": 1.59
     }
-  ]
+  ],
+  "updated_utc": "2026-10-25T05:28:30.127611+00:00",
+  "validation_note": "Backend rerun after database startup and isolated activity/positions fixture corrections: 87 passed in 99.721s. Frontend/build/contracts results retained from the same change set; later changes affect backend configuration, test fixtures and documentation only."
 }
