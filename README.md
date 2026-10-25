@@ -2,6 +2,19 @@
 
 DKM is a college-project prototype for uploading knowledge documents, registering them on Polygon Amoy, discovering them through semantic search, and purchasing access to encrypted files. The browser uses Next.js and MetaMask; FastAPI connects PostgreSQL/pgvector, Ollama, Pinata and the deployed contracts.
 
+API reference when the backend is running: http://localhost:8000/docs. Match frontend and backend deployment addresses before wallet operations.
+
+## Technology
+
+| Layer | Tools |
+| --- | --- |
+| Interface and wallet | Next.js 14, React, TypeScript, Tailwind, wagmi, RainbowKit, viem |
+| Backend and storage | FastAPI, PostgreSQL/pgvector, Pinata/IPFS |
+| Analysis and retrieval | Ollama, MiniLM, cosine similarity, MMR |
+| Integrity and confidentiality | BLAKE3, AES-256-GCM |
+| Contracts | Solidity, Hardhat 3, OpenZeppelin, Polygon Amoy |
+| Offline experiments | PennyLane quantum-circuit simulation and classical baselines |
+
 ## Current application
 
 - Welcome, signup/login, revocable cookie sessions, optional Google OAuth and signed wallet verification.
