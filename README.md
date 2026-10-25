@@ -1,163 +1,113 @@
-# Decentralized Knowledge Marketplace
+# Decentralized Knowledge Marketplace (DKM)
 
-DKM is a prototype marketplace for discovering and sharing knowledge assets such as documents and datasets. A creator uploads a file, AI generates catalog metadata, semantic search helps buyers find relevant assets, and a connected wallet handles the blockchain marketplace workflow.
+DKM is a college-project prototype for uploading knowledge documents, registering them on Polygon Amoy, discovering them through semantic search, and purchasing access to encrypted files. The browser uses Next.js and MetaMask; FastAPI connects PostgreSQL/pgvector, Ollama, Pinata and the deployed contracts.
 
-## Start here
-
-- **Creators:** analyze a document, review its generated metadata, upload the file and metadata to IPFS, and use the minting interface.
-- **Buyers:** browse or search the marketplace, connect a wallet on Polygon Amoy, and use the contract-based purchase workflow.
-- **Developers:** the application has three independently configured parts: a Next.js frontend, a FastAPI backend, and Solidity contracts.
-
-This repository is a development prototype. Service configuration and deployed contract addresses are required before the full workflow can run.
-
-## Features in the code
-
-- Text extraction from PDF, CSV, TXT, Markdown, JSON, and XML files.
-- Local Ollama metadata enrichment: title, summary, tags, domain, quality score, and suggested price.
-- Sentence Transformer embeddings and PostgreSQL/pgvector semantic search.
-- Pinata uploads for files and metadata, with BLAKE3 integrity hashes.
-- In-memory exact-duplicate checks and rejection of very small uploads.
-- Knowledge-asset, marketplace, mock token, and royalty-splitter contracts.
-- Wallet connection, minting, marketplace, and backend diagnostic pages.
-- Experimental graph discovery and QUBO reranking using a classical simulated-annealing sampler.
-
-The modules named `quantum_hash` and `quantum_search` use BLAKE3 and software-based search/reranking; they do not require quantum hardware.
-
-## How the project works
-
-```text
-File -> text extraction -> Ollama metadata -> review
-     -> Pinata/IPFS storage + pgvector indexing -> asset minting
-Search -> query embedding -> candidate retrieval/reranking -> marketplace
-Wallet -> contract purchase -> purchase/ownership access check
-```
+API reference when the backend is running: http://localhost:8000/docs. Match frontend and backend deployment addresses before wallet operations.
 
 ## Technology
 
-| Part | Technology |
+| Layer | Tools |
 | --- | --- |
-| Web interface | Next.js 14, React, TypeScript, Tailwind CSS |
-| Wallet integration | wagmi, RainbowKit, viem |
-| API | Python, FastAPI |
-| AI | Ollama llama3.2:3b, Sentence Transformers all-MiniLM-L6-v2 |
-| Database | PostgreSQL with pgvector |
-| File storage | Pinata/IPFS |
-| Contracts | Solidity 0.8.20, Hardhat, OpenZeppelin; Polygon Amoy |
+| Interface and wallet | Next.js 14, React, TypeScript, Tailwind, wagmi, RainbowKit, viem |
+| Backend and storage | FastAPI, PostgreSQL/pgvector, Pinata/IPFS |
+| Analysis and retrieval | Ollama, MiniLM, cosine similarity, MMR |
+| Integrity and confidentiality | BLAKE3, AES-256-GCM |
+| Contracts | Solidity, Hardhat 3, OpenZeppelin, Polygon Amoy |
+| Offline experiments | PennyLane quantum-circuit simulation and classical baselines |
 
-## Repository map
+## Current application
 
-- [backend/main.py](backend/main.py): API routes and upload/search orchestration.
-- [backend/services](backend/services): extraction, AI, embeddings, database, blockchain, and integrity services.
-- [frontend/app](frontend/app): home, minting, marketplace, and diagnostic pages.
-- [frontend/lib](frontend/lib): API client and blockchain integration.
-- [contracts/contracts](contracts/contracts): Solidity contracts.
-- [contracts/test](contracts/test): contract tests.
+- Welcome, signup/login, revocable cookie sessions, optional Google OAuth and signed wallet verification.
+- Document analysis with an evidence-backed Ollama rubric; normalized 384-dimensional MiniLM embeddings.
+- AES-256-GCM encrypted files pinned through Pinata, with BLAKE3 exact-duplicate and integrity checks.
+- Mint recovery, fixed-price listings, cancellation, access purchases and auctions on Amoy (chain ID **80002**).
+- Auctions accept **2 minutes to 720 hours** through the Minutes/Hours selector. Finalization and refunds require separate transactions.
+- MockUSDC pays asset prices; test POL pays gas. The minimum new registration price is **0.01 USDC**. A purchase grants access while the creator retains the registration NFT.
+- Five-minute purchase quotes do not reserve listings. The recorded platform rate is 5%, deducted from seller proceeds; configured royalties also reduce proceeds.
+- Protected downloads verify on-chain access, decrypt on the backend and check the recovered plaintext hash.
 
-## Local setup
+The user-facing payment route is wallet-only. Retained Transak/Razorpay/payout/receipt code supports historical and optional workflows; its presence is not a claim of live fiat conversion or universal currency support. QAOA/VQC are offline simulator experiments, not production search or price-setting algorithms.
 
-Clone the repository and open separate terminals for the services:
+## Start locally (Windows PowerShell)
 
-```sh
-git clone https://github.com/parzival787/capstone-project.git
-cd capstone-project
-```
+Keep your existing private configuration and Docker volume. Do not regenerate the content master key or reset PostgreSQL to resolve a startup problem.
 
-### 1. Start the supporting services
+1. Start Docker Desktop and the existing `dkm-postgres` container. Its observed image is `pgvector/pgvector:pg15`, host port 5432. If provisioning a new database, enable the `vector` extension before running backend schema setup.
+2. Check `backend/.env` privately: `DATABASE_URL`, the existing `CONTENT_MASTER_KEY`, Pinata credentials, Ollama settings and deployed chain addresses must match your setup. For a dedicated gateway set `PINATA_GATEWAY=your-gateway.mypinata.cloud` (hostname only). Credentials are never committed.
+3. Start the configured Ollama service and ensure the configured model and MiniLM cache are available.
+4. In one terminal:
 
-Use PostgreSQL with the pgvector extension available and a database for the project. Run Ollama and download its model:
-
-```sh
-ollama pull llama3.2:3b
-```
-
-Configure a Polygon Amoy RPC endpoint and the contract deployment you intend to use. Ensure the frontend addresses in [frontend/contracts/addresses/index.ts](frontend/contracts/addresses/index.ts) match the backend's contract addresses.
-
-### 2. Configure and run the backend
-
-Create a Python virtual environment inside `backend/` and activate it. The committed [backend/requirements.txt](backend/requirements.txt) currently lists only part of the dependencies, so it is not a complete fresh-install manifest. Imports in the API and service modules also require these packages:
-
-```sh
+```powershell
 cd backend
-python -m venv .venv
-# Windows PowerShell: .venv\Scripts\Activate.ps1
-# macOS/Linux: source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install fastapi uvicorn python-multipart python-dotenv httpx openai sentence-transformers pdfplumber asyncpg pgvector web3 blake3 networkx dimod
+.\venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
-Create `backend/.env` with your own configuration:
+5. In another terminal:
 
-```dotenv
-DATABASE_URL=postgresql://YOUR_USER:YOUR_PASSWORD@localhost:5432/dkm
-OLLAMA_BASE_URL=http://localhost:11434/v1
-PINATA_JWT=YOUR_PINATA_JWT
-BLOCKCHAIN_RPC_URL=YOUR_POLYGON_AMOY_RPC_URL
-BLOCKCHAIN_CHAIN_ID=80002
-MARKETPLACE_ADDRESS=YOUR_DEPLOYED_MARKETPLACE_ADDRESS
-KNOWLEDGE_ASSET_ADDRESS=YOUR_DEPLOYED_KNOWLEDGE_ASSET_ADDRESS
-```
-
-Start the API from `backend/`:
-
-```sh
-python -m uvicorn main:app --reload --port 8000
-```
-
-API documentation: http://localhost:8000/docs. The startup hook creates the application's database tables. The health endpoint also checks the legacy `NFT_STORAGE_TOKEN` setting even though the upload implementation uses `PINATA_JWT`; a degraded health response may reflect that mismatch.
-
-### 3. Configure and run the frontend
-
-From `frontend/`, create `.env.local`:
-
-```dotenv
-NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
-NEXT_PUBLIC_WC_PROJECT_ID=YOUR_WALLETCONNECT_PROJECT_ID
-```
-
-```sh
-npm install
+```powershell
+cd frontend
+npm ci
 npm run dev
 ```
 
-Open http://localhost:3000. Connect a wallet configured for Polygon Amoy when testing blockchain features.
+Open http://localhost:3000. For a production preview, use `npm run build` followed by `npm run start`; source changes require rebuilding and restarting that preview. Backend changes require restarting Uvicorn unless it was launched with `--reload`.
 
-### 4. Work with the contracts
+For a new Python environment, create `backend/venv` and install `backend/requirements.txt`; quantum experiments have separate requirements. Database, model, wallet and Pinata setup are prerequisites, not installed by starting the UI.
 
-From `contracts/`:
+## Data and trust boundaries
 
-```sh
-npm install
-npx hardhat compile
+| Location | Contents |
+| --- | --- |
+| PostgreSQL | Accounts, hashed sessions, metadata, vectors, wrapped per-file keys, quotes and workflow history |
+| Pinata/IPFS | Encrypted document bytes and public metadata |
+| Amoy contracts | Asset registrations, listings, auction bids, token settlement and access counters |
+| Private backend configuration | Master encryption key, provider credentials and RPC configuration |
+
+Inspect locally with `docker exec -it dkm-postgres psql -U postgres -d dkm` (adjust role/database to your configuration), then `\dt` or a limited SELECT. Do not publish password hashes, session records, encrypted-key envelopes or database dumps. A database backup also needs the original master key and retained IPFS content for full recovery.
+
+The backend can decrypt content. IPFS pinning is an availability dependency; a CID does not provide confidentiality. Registration does not prove authorship. Authorized recipients can redistribute downloaded plaintext.
+
+## Tests and evidence
+
+```powershell
+# From backend/
+.\venv\Scripts\python.exe -m unittest discover -s tests
+.\venv\Scripts\python.exe -m unittest test_ipfs_gateway
+
+# From frontend/
+node --test tests/*.test.mjs
+npx tsc --noEmit
+npm run build
+
+# From contracts/
 npx hardhat test
+npx tsc --noEmit
 ```
 
-The package's `npm test` script is a placeholder; use the Hardhat test command. Network deployment requires `ALCHEMY_AMOY_URL` and a test wallet's `PRIVATE_KEY` in `contracts/.env`. See [contracts/scripts](contracts/scripts) for deployment and verification scripts.
+See [TEST_EVIDENCE.md](TEST_EVIDENCE.md), [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) and [acceptance_results.json](acceptance_results.json) for dated outcomes. Local unit tests and simulated provider boundaries do not establish a complete live wallet workflow or an independent security audit. No real-money or mainnet completion is claimed.
 
-## API and validation guide
+The retained VQC benchmark reports test NDCG@10 of 0.905296 for MiniLM and 0.609317 for trained VQC; QAOA reports a 17.6013% mean optimality gap across 64 synthetic cases. See [research_results](research_results/README.md). These are small simulator comparisons with no demonstrated quantum advantage.
 
-Start PostgreSQL/pgvector and Ollama before the backend, then start the frontend. The configured browser origin is `http://localhost:3000`; a different frontend origin also needs a corresponding backend CORS change.
+## Documentation map
 
-| Endpoint | Purpose |
-| --- | --- |
-| `GET /health` | Inspect service configuration/readiness, including the legacy token check noted above |
-| `POST /api/analyze` | Upload a file as multipart data for extraction and enrichment |
-| `POST /api/upload-ipfs` | Upload a file and metadata to the IPFS publishing pipeline |
-| `POST /api/search` | Search with JSON `query` and optional `domain` / `max_price` |
-| `GET /api/assets/{token_id}/access?wallet_address=...` | Read on-chain purchase/access status |
-| `POST /api/assets/{vector_id}/link-token` | Associate a stored vector asset with a token and creator |
+- [Root file reference](docs/ROOT_FILES.md) describes top-level configuration, evidence and planning documents.
+- [Backend](backend/README.md): APIs, services, storage and tests.
+- [Frontend](frontend/README.md): routes, components, authentication and wallet interaction.
+- [Contracts](contracts/README.md): actual Hardhat setup, deployment records and access semantics.
+- Each source directory has a README describing every immediate file; each app-page directory describes its route. Dependencies, generated builds and secrets are excluded.
+- [FEATURE_COVERAGE.md](FEATURE_COVERAGE.md) maps capabilities; older rollout documents describe their dated scope.
+- [Technical guide](output/pdf/DKM_End_to_End_Project_Guide.pdf) provides the detailed walkthrough and file atlas. Code and newer dated notes take precedence over older PDFs.
 
-Use the interactive `/docs` page for the exact multipart fields and response schemas. For example, a search body is `{"query":"soil biodiversity","max_price":10}`.
+## Test-token funding
 
-For a demonstration, analyze a small sample document, review the generated metadata, publish with test configuration, and confirm that search finds it. For the wallet flow, check that frontend/backend contract addresses agree before using an Amoy test wallet.
+From the repository root, preview with:
 
-From `frontend/`, `npm run build` checks the production build. From `contracts/`, `npx hardhat test` runs the contract tests. Backend test modules use pytest and include calls to external services; install `pytest pytest-asyncio` in the backend environment and inspect/configure the selected tests before running them. No single root command starts or validates the entire system.
+```powershell
+.\backend\venv\Scripts\python.exe .\backend\mint_test_usdc.py WALLET_ADDRESS AMOUNT
+```
 
-## Current limits
+Append `--send` to mint additional test tokens using the configured signer and its Amoy POL. The script is restricted to the known Amoy mock-token contract; its symbol is `USDC`, but it is test currency. Check any submitted transaction hash before retrying after a timeout.
 
-- The backend dependency manifest needs completion; the setup above is derived from imports and has not been rehearsed in a fresh environment.
-- PDF extraction samples up to five pages and 4,000 characters; CSV extraction samples the header and first 50 data rows.
-- Duplicate detection is process-local and resets when the backend restarts.
-- Pinata uploads use the public network. A blockchain access check does not make the underlying IPFS file private.
-- Contract addresses, RPC settings, and external service credentials must agree across the three parts.
+## Contributing
 
-Use sample documents and a testnet wallet for demonstrations. Never commit credentials or wallet private keys.
+Read [AGENTS.md](AGENTS.md) and [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md). Work on a feature branch, preserve user data and existing buyer entitlements, run relevant checks and use a pull request. Never commit `.env`, private keys, backup contents or copied credentials. Contract source changes do not alter already deployed bytecode.

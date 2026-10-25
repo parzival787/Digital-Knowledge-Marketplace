@@ -80,6 +80,9 @@ contract Marketplace is
     error AuctionStillRunning();
 
     error NoRefundOwed();
+    error InvalidBuyer();
+    error InvalidPaymentReference();
+    error PaymentAlreadySettled();
 
     /*//////////////////////////////////////////////////////////////
                               ENUMS
@@ -212,6 +215,9 @@ contract Marketplace is
     ///      entitlement for the asset.
     mapping(uint256 => mapping(address => uint256)) public purchaseCount;
 
+    /// @notice Replay protection scoped to the account funding the purchase.
+    mapping(address => mapping(bytes32 => bool)) public settledPayments;
+
     function hasPurchased(
     uint256 tokenId,
     address buyer
@@ -241,6 +247,14 @@ contract Marketplace is
         uint256 indexed listingId,
         uint256 indexed tokenId,
         address indexed buyer,
+        uint256 amount
+    );
+
+    event FundedPurchase(
+        address indexed payer,
+        bytes32 indexed paymentReference,
+        uint256 indexed listingId,
+        address buyer,
         uint256 amount
     );
 
@@ -337,7 +351,7 @@ contract Marketplace is
         if (length > MAX_RECIPIENTS)
     revert TooManyRecipients();
 
-        uint256 totalShares;
+        uint256 totalShares = 0;
 
         for (uint256 i = 0; i < length;) {
 
@@ -420,6 +434,28 @@ contract Marketplace is
         whenNotPaused
         nonReentrant
     {
+        _buyAsset(listingId, msg.sender);
+    }
+
+    /// @notice Pay USDC from the caller and grant the license to another wallet.
+    /// @dev Relayers and checkout routers must fund the full sale and royalties.
+    ///      This never grants entitlement based on a claimed off-chain payment.
+    function buyAssetFor(
+        uint256 listingId,
+        address buyer,
+        uint256 expectedPrice,
+        bytes32 paymentReference
+    ) external whenNotPaused nonReentrant {
+        if (buyer == address(0)) revert InvalidBuyer();
+        if (paymentReference == bytes32(0)) revert InvalidPaymentReference();
+        if (settledPayments[msg.sender][paymentReference]) revert PaymentAlreadySettled();
+        if (listings[listingId].priceUSDC != expectedPrice) revert InvalidPrice();
+        settledPayments[msg.sender][paymentReference] = true;
+        _buyAsset(listingId, buyer);
+        emit FundedPurchase(msg.sender, paymentReference, listingId, buyer, expectedPrice);
+    }
+
+    function _buyAsset(uint256 listingId, address buyer) internal {
         Listing storage listing = listings[listingId];
 
         if (!listing.active)
@@ -428,7 +464,7 @@ contract Marketplace is
         if (listing.saleType != SaleType.FixedPrice)
             revert InvalidSaleType();
 
-        if (listing.seller == msg.sender)
+        if (listing.seller == buyer)
             revert SellerCannotBuyOwnAsset();
 
         if (knowledgeAsset.ownerOf(listing.tokenId) != listing.seller)
@@ -446,6 +482,9 @@ contract Marketplace is
 
         delete tokenToListing[tokenId];
 
+        // Entitlement rolls back with the transaction if payment/distribution fails.
+        purchaseCount[tokenId][buyer] += 1;
+
         //------------------------------------------------------------
         // Interactions
         //------------------------------------------------------------
@@ -462,14 +501,10 @@ contract Marketplace is
             price
         );
 
-        // Record the buyer's license/purchase entitlement.
-        // The ERC721 NFT remains owned by the original creator.
-        purchaseCount[tokenId][msg.sender] += 1;
-
         emit PurchaseCompleted(
             listingId,
             tokenId,
-            msg.sender,
+            buyer,
             price
         );
     }
@@ -521,7 +556,7 @@ contract Marketplace is
         if (length > MAX_RECIPIENTS)
     revert TooManyRecipients();
 
-        uint256 totalShares;
+        uint256 totalShares = 0;
 
         for (uint256 i = 0; i < length;) {
 
@@ -621,16 +656,6 @@ contract Marketplace is
         }
 
         //------------------------------------------------------------
-        // Transfer bidder funds
-        //------------------------------------------------------------
-
-        usdc.safeTransferFrom(
-            msg.sender,
-            address(this),
-            amount
-        );
-
-        //------------------------------------------------------------
         // Credit the previous highest bidder's refund (pull pattern)
         //------------------------------------------------------------
 
@@ -654,6 +679,9 @@ contract Marketplace is
                 timestamp: uint40(block.timestamp)
             })
         );
+
+        // All effects precede token callbacks and revert if the transfer fails.
+        usdc.safeTransferFrom(msg.sender, address(this), amount);
 
         emit BidPlaced(
             auction.tokenId,
@@ -726,6 +754,9 @@ contract Marketplace is
             return;
         }
 
+        // Record entitlement before external calls; failed payouts revert it.
+        purchaseCount[auction.tokenId][auction.highestBidder] += 1;
+
         //------------------------------------------------------------
         // Transfer winning bid to RoyaltySplitter
         //------------------------------------------------------------
@@ -744,14 +775,6 @@ contract Marketplace is
             auctionRecipients[auctionId],
             auction.highestBid
         );
-
-        //------------------------------------------------------------
-        // Transfer NFT
-        //------------------------------------------------------------
-
-        // Record the winning bidder's license/purchase entitlement.
-        // The ERC721 NFT remains owned by the original creator.
-        purchaseCount[auction.tokenId][auction.highestBidder] += 1;
 
         emit AuctionEnded(
             auction.tokenId,

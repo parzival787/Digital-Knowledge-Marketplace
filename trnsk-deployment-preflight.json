@@ -1,0 +1,15 @@
+{
+  "chain_id": 80002,
+  "block": 49976731,
+  "admin": "0x733368FEb00BEF70c1DB14bd621CeAAd5f32DF44",
+  "balance_test_POL": "0",
+  "gas_price_wei": "50000000064",
+  "deployment_gas": {
+    "RoyaltySplitter": 1041236,
+    "Marketplace": 2361617,
+    "PaymentReceiptRegistry": 1019934
+  },
+  "wiring_gas_budget": 100000,
+  "deployment_budget_test_POL": "0.452278700578916736",
+  "budget_note": "Read-only deployment estimates plus 100000 wiring gas allowance at twice current gas price; refresh before signing."
+}

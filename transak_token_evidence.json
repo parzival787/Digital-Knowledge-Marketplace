@@ -1,0 +1,17 @@
+{
+  "verified": true,
+  "chain_id": 80002,
+  "token": "0x0c86A754A29714C4Fe9C6F1359fa7099eD174c0b",
+  "symbol": "TRNSK",
+  "decimals": 18,
+  "block": 49912561,
+  "block_hash": "0x13b115ab49b29eb9437577b9a8778495f18dcbafb9cb31c06a5b80304d6d5fb5",
+  "code_hash": "0x3205e942cbe00e85143b3a494a4edbff5f27813f3cc89163dacad76242037a05",
+  "probe_balance": "0",
+  "probe_allowance": "0",
+  "approve_zero_eth_call": true,
+  "transfer_zero_eth_call": true,
+  "broadcast": false,
+  "checked_at": "2026-10-11T16:11:10.384135+00:00",
+  "limitation": "Zero-value eth_call checks ABI behavior, not funded delivery or settlement."
+}

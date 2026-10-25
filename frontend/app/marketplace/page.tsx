@@ -1,11 +1,10 @@
 "use client";
+import { Suspense, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 import { useKnowledgeAsset, useTotalMinted } from "@/lib/blockchain/useKnowledgeAssets";
 import AssetCard from "@/components/marketplace/AssetCard";
-console.log("========== ASSET CARD DEBUG ==========");
-console.log("AssetCard value:", AssetCard);
-console.log("AssetCard typeof:", typeof AssetCard);
-console.log("AssetCard is function:", typeof AssetCard === "function");
 type KnowledgeAssetData = {
   ipfsCID: string;
   metadataCID: string;
@@ -20,8 +19,10 @@ type KnowledgeAssetData = {
 
 function AssetItem({
   tokenId,
+  saleMode,
 }: {
   tokenId: bigint;
+  saleMode: string;
 }) {
   const {
     data: asset,
@@ -64,6 +65,7 @@ function AssetItem({
 
   return (
   <AssetCard
+    saleMode={saleMode}
     tokenId={tokenId}
     asset={{
       ipfsCID: assetData.ipfsCID,
@@ -79,7 +81,9 @@ function AssetItem({
 );
 }
 
-export default function MarketplacePage() {
+function MarketplaceContent() {
+  const searchParams = useSearchParams();
+  const [saleMode, setSaleMode] = useState(searchParams.get("mode") === "auction" ? "auction" : "all");
   const {
     data: totalMinted,
     isLoading,
@@ -105,6 +109,8 @@ export default function MarketplacePage() {
   }
 
   const total = Number(totalMinted ?? 0n);
+  const requested = Number(searchParams.get("asset"));
+  const focused = Number.isSafeInteger(requested) && requested > 0 && requested <= total ? requested : null;
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-12">
@@ -115,7 +121,7 @@ export default function MarketplacePage() {
         </h1>
 
         <p className="mt-2 text-muted-foreground">
-          Discover knowledge assets stored on-chain.
+          Explore ideas, datasets and research. Purchase access with your wallet.
         </p>
       </div>
 
@@ -126,23 +132,35 @@ export default function MarketplacePage() {
           </p>
         </div>
       ) : (
-        <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-10">
+          {focused && <Link href="/marketplace" className="mb-6 inline-block text-blue-700 underline">← Browse all assets</Link>}
+          <div className="mb-6 flex gap-3" aria-label="Sale mode">
+            {[["all", "All"], ["fixed", "Fixed Price"], ["auction", "Auctions"]].map(([value, label]) => <button key={value} aria-pressed={saleMode === value} onClick={() => setSaleMode(value)} className={`rounded border px-4 py-2 ${saleMode === value ? "bg-black text-white" : ""}`}>{label}</button>)}
+          </div>
+          <div className="peer grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {Array.from(
-            { length: total },
+            { length: focused ? 1 : total },
             (_, index) => {
-              const tokenId = BigInt(index + 1);
+              const tokenId = BigInt(focused ?? index + 1);
 
               return (
                 <AssetItem
+                  saleMode={saleMode}
                   key={tokenId.toString()}
                   tokenId={tokenId}
                 />
               );
             }
           )}
+          </div>
+          <p className="hidden rounded border p-6 peer-empty:block">No assets match this sale mode.</p>
         </div>
       )}
 
     </main>
   );
+}
+
+export default function MarketplacePage() {
+  return <Suspense fallback={<main className="p-12" role="status">Loading marketplace…</main>}><MarketplaceContent /></Suspense>;
 }

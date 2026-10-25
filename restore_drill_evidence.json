@@ -1,0 +1,67 @@
+{
+  "scope": "local PostgreSQL dump/restore; all public-table row counts and content digests matched",
+  "external_ipfs_restore_tested": false,
+  "independent_key_backup_tested": false,
+  "tables": [
+    {
+      "table": "app_sessions",
+      "rows": 0,
+      "matches": true
+    },
+    {
+      "table": "app_users",
+      "rows": 0,
+      "matches": true
+    },
+    {
+      "table": "auth_attempts",
+      "rows": 2,
+      "matches": true
+    },
+    {
+      "table": "chain_sync",
+      "rows": 1,
+      "matches": true
+    },
+    {
+      "table": "google_auth_flows",
+      "rows": 0,
+      "matches": true
+    },
+    {
+      "table": "knowledge_assets",
+      "rows": 22,
+      "matches": true
+    },
+    {
+      "table": "market_events",
+      "rows": 0,
+      "matches": true
+    },
+    {
+      "table": "payment_orders",
+      "rows": 1,
+      "matches": true
+    },
+    {
+      "table": "payment_recovery_events",
+      "rows": 0,
+      "matches": true
+    },
+    {
+      "table": "reviews",
+      "rows": 0,
+      "matches": true
+    },
+    {
+      "table": "transak_staging_orders",
+      "rows": 0,
+      "matches": true
+    },
+    {
+      "table": "transak_staging_tokens",
+      "rows": 1,
+      "matches": true
+    }
+  ]
+}

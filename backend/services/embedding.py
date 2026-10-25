@@ -8,7 +8,8 @@ def get_model() -> SentenceTransformer:
 
     if _model is None:
         print("Loading embedding model all-MiniLM-L6-v2...")
-        _model = SentenceTransformer("all-MiniLM-L6-v2")
+        # Search requests must not stall on remote model metadata/downloads.
+        _model = SentenceTransformer("all-MiniLM-L6-v2", local_files_only=True)
         print("Embedding model ready.")
 
     return _model

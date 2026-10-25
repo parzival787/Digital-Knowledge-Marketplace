@@ -1,0 +1,659 @@
+=== PAGE 1 ===
+DKM: Blockchain-Backed Knowledge Asset Access
+and Semantic Retrieval with an Evaluation of
+Variational Quantum Embeddings
+Vaibhav Singh1 Anish Dey 2 Yashika Pipalwa3
+School of Technology Management and Engineering, SVKM’S NMIMS Deemed to be University, Navi Mumbai, India
+Corresponding Author Email:abc@gmail.com [VERIFY: placeholder address]
+Abstract—Knowledge-sharing platforms must support docu-
+ment discovery, verifiable asset registration, and controlled access
+to stored content. This paper presents DKM, a hybrid prototype
+that combines ERC-721 asset registration on the Polygon Amoy
+testnet with encrypted off-chain storage and semantic retrieval.
+Uploaded documents receive LLM-generated metadata; nor-
+malized MiniLM summary embeddings support vector search,
+and metadata relationships supply a supplementary graph-based
+ranking signal. Content is protected with AES-GCM envelope
+encryption, and the backend, which holds the master key, verifies
+wallet-linked entitlement before returning decrypted files. A post-
+quantum key-release layer is designed but not implemented,
+and no marketplace purchase-to-decryption result is reported.
+We additionally evaluate a four-qubit variational quantum fea-
+ture model, executed by classical statevector simulation, on a
+controlled corpus of 96 authored documents and 32 queries
+(16 validation, 16 test). On the test split, original MiniLM
+embeddings achieved NDCG@10 of 0.9053, against 0.7027 for
+a four-component PCA baseline with ridge expansion and 0.6093
+for the trained quantum model; the quantum representation
+did not improve retrieval. The study offers a prototype and a
+bounded, single-seed assessment, and identifies centralized key
+custody, a small author-built corpus, in-domain queries, and
+missing keyword and ablation baselines as limitations.
+Index Terms—Decentralized knowledge marketplace, knowl-
+edge assets, semantic retrieval, blockchain access control, varia-
+tional quantum circuits, authenticated encryption, reproducible
+evaluation
+I. INTRODUCTION
+A. Problem Context and Existing Marketplaces
+Knowledge assets — research documents, datasets, trained
+models, and curated domain resources — are increasingly
+traded as reusable digital resources, yet their exchange depends
+heavily on centralized platforms that mediate publication,
+discovery, transactions, and access. Such platforms concentrate
+metadata, ownership records, and access policies under one
+operator, which limits independent verification and creates
+a single point of failure. AQUASTREAM identifies opaque
+pricing, privacy risk, single points of failure, and limited
+verifiable ownership as core limitations of centralized data
+marketplaces [3]. Decentralization addresses the transaction
+and ownership layer; it does not by itself help buyers discover
+or assess heterogeneous assets by semantic relevance and
+quality.
+Existing decentralized marketplaces use smart contracts and
+decentralized storage for verifiable ownership, programmable
+transactions, and controlled access [3], [4], [7]. AQUAS-
+TREAM, the closest foundation for DKM, combines ERC-
+721 ownership, IPFS storage through Pinata, AES-256/RSA
+encryption, and ERC-20 payments [3]. Across the 18 papers
+reviewed in Section II, we found four recurring limitations.
+(i) Semantic discovery is absent: PACDAM ranks candi-
+dates with rule-based weighted scoring [5], and the other
+marketplaces provide no semantic search. (ii) No automated
+quality assessment exists; MetaTrade offers only manual buyer
+ratings [7]. (iii) Duplicate detection appears only as perceptual-
+hash plagiarism checks for AI-generated content [7], not for
+documents or datasets. (iv) Post-quantum protection is not
+integrated into marketplace access control, although post-
+quantum blockchain work exists separately [14]–[16]. These
+statements are scoped to the reviewed set and are not claims
+about all existing work.
+B. Approach, Research Questions, and Contributions
+DKM retains AQUASTREAM’s separation of on-chain as-
+set state from off-chain content and adds knowledge-specific
+metadata, retrieval, and access mediation. We do not claim
+novelty for NFTs, AES, BLAKE3, IPFS, MiniLM, VQC,
+or QAOA. The system generates LLM metadata at upload,
+embeds summaries with MiniLM, applies a graph-propagation
+and QUBO heuristic, rejects byte-identical duplicates, and
+encrypts protected content. Post-quantum key release (Lit
+Protocol, ML-KEM-768) is a planned extension that is neither
+implemented nor evaluated here.
+RQ1:How does a trained variational quantum circuit (VQC)
+embedding compare with the original embedding and an
+equally compressed classical baseline for retrieval?H1:The
+trained VQC does not exceed original MiniLM in NDCG@10,
+and its gain over an untrained circuit cannot be separated
+from noise without repeated seeds and confidence intervals.
+RQ2:How strong is the unmodified MiniLM representation
+as a reference on the same benchmark?H2:It obtains the
+highest NDCG@10 of the four representations; this does not
+measure the production pipeline.RQ3 (optional):How does
+simulated QAOA compare with classical optimization on a
+synthetic bounded pricing objective?H3:Classical optimiza-
+
+=== PAGE 2 ===
+tion matches or outperforms QAOA on this small, smooth
+problem.RQ4:Which prototype components are implemented
+and which are unvalidated?H4:Registration, storage, and
+retrieval components are implemented on Polygon Amoy;
+purchase-to-decryption and post-quantum key release are not
+validated.
+The contributions are: (1) a hybrid knowledge-asset pro-
+totype with LLM metadata, semantic retrieval, graph prop-
+agation, and encrypted off-chain storage on an ERC-721
+foundation; (2) an upload pipeline linking PostgreSQL vec-
+tor identifiers, IPFS CIDs, and on-chain token identifiers;
+(3) a controlled VQC retrieval evaluation (96 documents, 32
+queries) whose result is negative; and (4) an explicit account of
+which components are implemented, unvalidated, or planned.
+II. LITERATUREREVIEW
+A. Decentralized marketplaces.AQUASTREAM [3] trades
+datasets as ERC-721 tokens with IPFS storage and AES-
+256/RSA key release. Cai et al. [1] monetize aggregated
+truth values mined from crowdsensed streams rather than
+documents, and Bernab´e-Rodr´ıguez et al. [2] coordinate secure
+multi-party computation through a blockchain. MetaAICM [4]
+and MetaTrade [7] trade machine-learning data and models
+and AI-generated content in the metaverse; MetaTrade adds
+hash-gated key release, perceptual-hash plagiarism checks,
+and inheritable royalties. PACDAM [5] targets cross-chain
+asset exchange, CloudChain [6] AI compute, and Aljohani et
+al. [8] reviewer anonymity. These works contribute ownership,
+payment, privacy, or access mechanics; none treats semantic
+discovery or knowledge-specific quality as first-class.
+B. Semantic discovery.Zhu et al. [18] describe the query-
+rewriting, retrieval, reranking, and reading pipeline, note that
+term-based retrieval suffers vocabulary mismatch, that dense
+retrievers can generalize poorly out of domain, and that diver-
+sity is a classical reranking objective. Wang et al. [17] model
+relationships among knowledge-graph triples on a blockchain
+for quality consensus, not for discovering assets. No reviewed
+paper covers graph-based asset discovery, combines semantic
+discovery with a marketplace or blockchain context, or tests
+variational quantum embeddings for retrieval; the VQC exper-
+iment here is therefore exploratory within that scope.
+C. Storage and integrity.Khalid et al. [9] survey Storj,
+Filecoin, and Sia and note that content identifiers are public:
+confidentiality requires client-side encryption before storage,
+while the identifier gives integrity only. The survey’s attack
+taxonomy is a useful threat checklist; DKM has no proof-of-
+storage mechanism.
+D. Encryption and access control.Bose [10] combines
+threshold encryption with universal zero-knowledge proofs,
+and ZK-PEAC [11] embeds blinded access policies with time-
+bound tokens and game-based proofs for health records. Abla
+et al. [12] (FHE-based) and Xue et al. [13] (fine-grained, ZKP-
+based) give fair, privacy-preserving data trading. These offer
+stronger guarantees than DKM’s backend-mediated, coarse
+per-asset entitlement check, and DKM implements none of
+them.
+TABLE I
+CAPABILITY COVERAGE IN THE18REVIEWED PAPERS.
+Capability Closest precedent Status
+ERC-721 ownership AQUASTREAM Present;
+MetaTrade
+is license-based
+Decentralized stor-
+age
+AQUASTREAM, Meta-
+Trade, CloudChain
+Present
+Encrypted key re-
+lease
+AQUASTREAM, Meta-
+Trade
+Present
+Duplicate detection MetaTrade (pHash, AI
+content)
+Not for docu-
+ments
+Automated quality
+score
+— (manual ratings only) Absent
+Semantic
+marketplace search
+— (PACDAM: rule-
+based)
+Absent
+Graph-based discov-
+ery
+— Absent
+Post-quantum key
+release
+— (Dilithium chain only) Absent
+E. Post-quantum security.Fernandez-Carames and Fraga-
+Lamas [14] and Yang et al. [15] survey post-quantum and
+quantum blockchains, and Saji et al. [16] build a Dilithium-
+signed blockchain testnet. None addresses marketplace access
+control, and none evaluates BLAKE3 or Kyber against a
+quantum attacker. ML-KEM-768 is the NIST-standardized
+module-lattice key-encapsulation mechanism (FIPS 203) and
+rests on the Module-LWE assumption, not on experiment;
+BLAKE3 is a fast hash, not a post-quantum contribution. This
+literature does not support quantum-walk, QUBO, QAOA, or
+VQC components, which are our own design choices.
+F . Synthesis.Table I summarizes capability coverage in the
+reviewed set.
+III. SYSTEMARCHITECTURE ANDIMPLEMENTATION
+A. System Overview and Architecture
+This is a hybrid architecture with decentralized components;
+backend, database, key custody, and RPC services remain trust
+dependencies. A user connects a wallet through a Next.js
+frontend. A FastAPI backend coordinates an Ollama-served
+Llama 3.2 model for metadata, MiniLM for 384-dimensional
+embeddings, graph propagation with a classical QUBO selec-
+tion heuristic, AES-GCM encryption with BLAKE3 integrity
+checking, and Web3.py for access verification. PostgreSQL
+with pgvector, IPFS through Pinata, and the KnowledgeAsset
+contract on Polygon Amoy form the storage layer (Fig. 1).
+Data placement is as follows. The blockchain holds as-
+set registration, creator-linked state, references, and access
+state. IPFS holds ciphertext for assets uploaded through the
+protected path; published metadata may remain public. Post-
+greSQL holds accounts, sessions, searchable metadata, nor-
+malized vectors, wrapped content keys, and application link-
+age. The content master key resides in backend configuration.
+Wallet signing, database persistence, and chain confirmation
+are separate operations, not an atomic transaction. Fig. 1 is a
+design figure and does not show that every route operates end
+to end; Table II records actual status.
+
+=== PAGE 3 ===
+TABLE II
+IMPLEMENTATION STATUS AND EVIDENCE.
+Component Status Evidence or limitation
+FastAPI backend;
+PostgreSQL/pgvector
+Implemented REST layer; vectors, metadata, wrapped keys, linkage. No load test or audit.
+LLM metadata (Llama 3.2)
+and quality score
+Implemented, unvalidated Title, summary, domain, tags, heuristic score. Uncalibrated; no human ratingNOT
+EV ALUATED.
+MiniLM retrieval Implemented; offline test
+only
+Original-MiniLM row of Table VI; production-pipeline NDCG@10 not measured
+NOT EV ALUATED.
+Graph propagation; QUBO
+selection
+Implemented, unvalidated Classical heuristics; no ablation or diversity metricNOT EV ALUATED.
+BLAKE3 exact duplicate
+guard
+Implemented Byte-identical files only; near-duplicate detectionNOT IMPLEMENTED.
+AES-GCM encryption; back-
+end access check
+Implemented Protected upload path; backend holds master key; bounded tests, not an audit.
+Vector–CID–token linkage Implemented Separate operations, not atomic.
+KnowledgeAsset
+deployment and mint
+Implemented on Amoy Testnet only (Table III).
+Marketplace listing[VERIFY: record conflict]Older note: in progress; later record: listed after redeployment.
+Purchase-to-decryption flow[VERIFY: confirm a full
+run]
+No retained end-to-end evidence; not claimed.
+Lit Protocol / ML-KEM-768PLANNED NOT IMPLE-
+MENTED
+Design only; no latency or security result.
+VQC benchmark; QAOA
+simulation
+Offline experiments Do not replace production embeddings; QAOA is not a payment evaluation.
+Production deployment and
+audit
+NOT IMPLEMENTEDTestnet prototype only.
+Fig. 1. DKM system architecture. The dashed boundary identifies the
+centralized trust boundary comprising the backend, database, and key custody.
+The dashed wallet transaction path represents direct wallet-to-blockchain
+interaction, while the identity linkage connects PostgreSQL vector identifiers,
+IPFS content identifiers, and on-chain token identifiers.
+B. Blockchain Layer
+KnowledgeAssetis the ERC-721 contract that regis-
+ters each asset.RoyaltySplitter,Marketplace, and
+MockUSDC(a test ERC-20) are deployment context only;
+payment, checkout, and royalty flows are outside this paper’s
+evaluation. Contracts are built with Hardhat 3.10.0 and Open-
+Zeppelin libraries, and the backend reaches the chain through
+Web3.py over an Alchemy RPC connection. The original
+configuration targeted Polygon Mumbai; after Mumbai’s dep-
+recation the deployment moved to the Polygon Amoy testnet
+(chain ID 80002, gas token POL), and the two networks are
+not treated as one deployment.
+The addresses come from one deployment record; the earlier
+deployment documentation lists differentMarketplaceand
+RoyaltySplitteraddresses and was not available for
+comparison.[VERIFY: check all four against the current
+registry and the Amoy explorer]
+C. Metadata and Upload Pipeline
+An upload passes through Document→Embedding→
+Fraud/Duplicate Screening→Pinata file upload→LLM
+metadata→BLAKE3 hash→Pinata metadata upload→
+PostgreSQL→KnowledgeAsset.mint().[VERIFY:
+the stored vector is computed from the LLM summary,
+which implies enrichment precedes embedding; confirm
+the stage order in code]Extraction is bounded: the first
+five PDF pages, the first 51 CSV lines, and at most 4,000
+characters of plain text, so metadata reflects a sample, not ex-
+haustive understanding. The model produces a title, summary,
+domain, tags, and a heuristic quality score. Thefile_cid
+
+=== PAGE 4 ===
+TABLE III
+SMART CONTRACTS ON THEPOLYGONAMOY TESTNET(CHAINID 80002,GAS TOKENPOL);NONE IS A MAINNET DEPLOYMENT.
+Contract Role Address Check
+KnowledgeAsset ERC-721 asset registration0x2C16409A3db9880f9A70e71B5b131A17db533Fc9—
+RoyaltySplitter Configured distribution mecha-
+nism
+0x43cE72CEd667bDe9252044451b07ecA1aec2D300[VERIFY: older record dif-
+fers]
+Marketplace Listing and transaction contract0xDe7bdacb8B3ff631dbcdb09C81c0de7421475A5d[VERIFY: older record dif-
+fers]
+MockUSDC Test ERC-20 token0x0bd22C54F90E7309dd5e7e73270Ac72d4cD74719—
+andmetadata_cidare recorded with the BLAKE3 content
+hash, and each asset is identified by
+vector_id↔ {file_cid,metadata_cid}
+↔token_id. (1)
+The database write, IPFS uploads, and blockchain confirma-
+tion are separate operations, so a failure between steps can
+leave partial records.
+D. Semantic Discovery and Ranking
+Documents and queries are encoded with
+all-MiniLM-L6-v2and L2-normalized, so similarity
+is the dot product
+s(q, d) =q T d,(2)
+equal to cosine similarity for unit vectors. Assets form a graph
+with edge weights
+wij =|T i ∩ Tj|+1(δ i =δ j),(3)
+whereT i is the tag set andδ i the domain of asseti. The
+graph scoreg i is obtained by row-normalizing the adjacency
+matrixWto ˜W, starting from a one-hot vectorv (0) on the top
+semantic candidate, and applyingv (t+1) = ˜W v(t)/∥ ˜W v(t)∥2
+for three steps, withg i = (v (3)
+i )2. The ranking score is
+Si = 0.6s i + 0.4g i,(4)
+with fixed weights that were not shown to be optimal. The
+graph propagation step is a classical matrix-vector heuristic; it
+is not a quantum walk in the unitary evolution sense. Selection
+minimizes
+E(x) =−
+∑︂
+i
+Sixi + 0.3
+∑︂
+i<j
+xixj, x i ∈ {0,1},(5)
+by classical simulated annealing; the implementation fills
+remaining result slots after selection. The pairwise penalty
+is constant rather than a measured semantic similarity, and
+no exact-kconstraint is imposed. Neither the graph term nor
+the QUBO step has been shown to improve retrieval quality
+or diversity; no ablation against a classical baseline such as
+personalized PageRank or Maximal Marginal Relevance has
+been run.
+The VQC of Fig. 2 is an offline experimental representation;
+it does not replace production embeddings, and the produc-
+tion graph heuristic is not a quantum circuit. The retained
+benchmark encodes authored document text directly, whereas
+the upload pipeline embeds LLM summaries, so benchmark
+scores are not production search quality.
+Fig. 2. VQC embedding pipeline and gate-level circuit. Original 384-
+dimensional MiniLM vectors are compressed through training-fitted PCA,
+encoded as rotation angles, processed by a four-qubit circuit, and represented
+by four Z and four adjacent ZZ expectation values. The learned ridge
+projection expands the eight-dimensional output to 384 dimensions; this is a
+learned projection, not recovery of discarded information. All circuit execution
+uses classical statevector simulation with PennyLanedefault.qubit. No
+quantum hardware was used.
+E. Quality Assessment and Fraud/Duplicate Detection
+The LLM quality score is uncalibrated and has not been
+validated against independent human judgment. The BLAKE3
+duplicate guard detects byte-identical files only, not para-
+phrases, plagiarism, or semantic near-duplicates. Hash equality
+can reject identical byte sequences but cannot establish orig-
+inality, truth, or authorship, and the “fraud detector” checks
+duplicates and very small files rather than acting as a learned
+classifier. No human ratings, score correlations, or duplicate
+precision, recall, or F1 exist for this system.
+F . Storage and Content Integrity
+Files and metadata are pinned to IPFS through Pinata, and
+PostgreSQL links the resulting CIDs to the vector entry and
+the Polygon token. Content addressing via IPFS CID provides
+integrity verification, not confidentiality — the encryption
+layer is the sole confidentiality mechanism. BLAKE3 supports
+integrity checking but is not encryption. Pinning availability,
+integrity, and confidentiality are different properties. Assets
+uploaded through the protected path are pinned as AES-GCM
+ciphertext, whereas published metadata may remain public and
+legacy public-file assets are not retroactively protected.
+
+=== PAGE 5 ===
+G. Security Layer and Post-Quantum Cryptography
+Lit Protocol token-gated access and CRYSTALS-Kyber key
+encapsulation are designed for Phase 4 and have not yet been
+benchmarked. The currently deployed system uses AES-GCM
+envelope encryption with backend-held master key custody.
+Each protected file is encrypted under a random 256-bit
+key with AES-GCM, which provides authenticated encryption,
+and the file key is wrapped under the backend master key;
+wrapped keys are stored in PostgreSQL. The backend sees
+uploaded plaintext and can decrypt any stored file, so this is not
+end-to-end encryption against the operator. Before returning
+content, the backend authenticates the session, verifies wallet
+control through an expiring challenge, and checks entitlement
+against the contract. BLAKE3 is an integrity hash, not a key-
+establishment protocol. Lit Protocol and ML-KEM-768 remain
+a planned, unbenchmarked extension; no latency or post-
+quantum security result is reported, and the deployed system
+has no demonstrated post-quantum protection. Table IV lists
+controls evidenced by the implementation and their residual
+limits; it is not a formal proof, audit, or penetration test.
+H. Frontend and Wallet Integration
+The frontend is a Next.js application built with React and
+TypeScript that uses wagmi, RainbowKit (not ConnectKit),
+and MetaMask to connect the wallet, request transaction
+signatures, and call backend APIs. A connected wallet shows
+only which address the user controls; entitlement to a stored
+document is established by the backend check of Section III-G.
+IV. EXPERIMENTALMETHODOLOGY ANDRESULTS
+A. Methodology
+The corpus has 96 documents authored by the researchers;
+all 96 form the retrieval corpus, and 32 document variants are
+excluded from model fitting. There are 32 authored queries, 16
+validation and 16 test, with disjoint topics. Relevance labels
+are authored topic/domain rules on a 3/1/0 scale, not indepen-
+dent human judgments. Query topics also occur in training
+documents, so this is in-domain retrieval, and query wording
+overlaps document subjects, so scores can overestimate real-
+istic quality. Training fits PCA and scaling on 64 documents;
+expansion is trained on document vectors only; no test query,
+label, or metric enters training or parameter selection. Four
+representations are compared on identical documents, queries,
+and labels (Table V).[VERIFY: domain mix and number
+of domains were not recorded in the retained report; add
+if available]
+B. VQC Retrieval Results (RQ1, RQ2)
+The central result is negative. The trained VQC obtained test
+NDCG@10 of 0.6093, below both original MiniLM (0.9053)
+and PCA4 with ridge expansion (0.7027). Training raised test
+NDCG@10 from 0.6050 to 0.6093 relative to the untrained
+circuit, a difference of 0.0043 that cannot be separated from
+noise with 16 queries and one seed. Training loss fell from
+0.4852 to 0.0987, yet retrieval did not improve beyond the
+classical compressed baseline, so optimizing Gram alignment
+Fig. 3. NDCG@10 across the four evaluated representations on the controlled
+benchmark (96 authored documents; 16 validation and 16 test queries;
+classical statevector simulation; single run, no confidence intervals).
+did not translate into retrieval gains; we did not investigate
+why. A four-component bottleneck discards information and
+plain PCA4 also trails the original embeddings, but no ex-
+periment here isolates the bottleneck. H1 is consistent with
+these results, and no quantum advantage is claimed. For H2,
+original MiniLM scored highest, but this reflects an author-
+built corpus with in-domain queries and rule-based labels and
+does not measure the production pipeline. No BM25 or other
+keyword baseline was run, so no claim is made that semantic
+retrieval outperforms keyword retrieval.
+C. Optional Experiment: Synthetic QAOA Pricing (RQ3)
+[VERIFY: keep this subsection only if QAOA is re-
+quired; it is a pricing optimization study, separate from
+retrieval and from payments]The study uses 64 independent
+synthetic cases, each with 100 integer candidate prices on
+seven qubits, QAOA depth 2, up to 80 COBYLA evaluations,
+and 2,048 seeded samples per case. Demand is a synthetic lo-
+gistic curve, not observed demand or earned revenue. The clas-
+sical baseline uses bounded scalar optimization, an exhaustive
+search supplies the exact oracle (0.000051 s per case), and the
+uniform baseline uses the same sample count; reference prices
+are random, not the system’s LLM recommendations. All
+execution is local classical simulation, and timings are not an
+equal-resource benchmark. This small, smooth, independent-
+price problem favors classical optimization; the 64 cases are
+priced independently and do not constitute a jointly optimized
+portfolio (Table VII, Fig. 4). H3 is consistent with the results;
+no scalable oracle, hardware speedup, or quantum advantage
+is claimed.
+Mean synthetic revenue for the reference random prices
+and the uniform fixed sample was 6555.652 and 5145.606,
+respectively.
+D. Capabilities Not Evaluated
+This paper reports no measurement for BM25-versus-
+DKM retrieval, human-rated quality-score correlation or inter-
+rater agreement, duplicate or near-duplicate precision, recall,
+
+=== PAGE 6 ===
+TABLE IV
+THREAT-TO-MITIGATION AND RESIDUAL-RISK SUMMARY.
+Threat or failure mode Existing mechanism Residual limitation
+Unauthorized content
+requests
+Session authentication, origin checks, backend entitle-
+ment check before decryption
+Trusted backend; bounded tests, not an audit
+Wallet/account mismatch Expiring wallet-signature challenge binds wallet to ac-
+count
+Wallet connection alone is not entitlement
+Ciphertext tampering AES-GCM authentication tag; BLAKE3 hash Detection only, not prevention
+Duplicate uploads Persisted BLAKE3 equality guard with concurrent-
+insertion guard
+Byte-identical files only
+Storage or RPC unavailabil-
+ity
+Off-chain IPFS pinning; on-chain state Pinata and RPC remain availability dependencies; no
+failover evidenced
+Master-key compromise Per-file keys wrapped under a backend-held master key Compromise exposes all content; no rotation or hardware
+protection evidenced
+Misleading or low-quality
+metadata
+LLM generation reduces seller self-reporting LLM errors possible; score uncalibrated
+Semantic duplicates, plagia-
+rism
+None Paraphrased assets pass the exact guard
+Quantum-capable adversary None deployed; ML-KEM-768 planned No demonstrated post-quantum protection
+Redistribution after plaintext
+download
+None A legitimate reader can copy content; no DRM
+TABLE V
+VQCEXPERIMENTAL CONFIGURATION.
+Parameter Value Parameter Value
+Corpus / queries 96 documents; 32 queries (16 val., 16
+test)
+Optimizer, epochs Adam; 40
+Fitting vectors 64 documents Objective Cosine Gram-matrix alignment
+Retrieval corpus All 96 documents Seed; runs 31; single run
+Labels Authored rules, 3/1/0 Simulator PennyLanedefault.qubit
+Original embedding Normalized all-MiniLM-L6-v2, 384-D Training time 1.027 s
+Classical baseline PCA (4 components) + ridge expan-
+sion
+Training loss 0.485185 to 0.098681
+Circuit 4 qubits; 2 layers RY/RZ; ring CNOT Angle encoding Arctan-scaled PCA components
+Measured features 4 Z + 4 adjacent ZZ (8-D) Expanded output 384-D
+Hardware (CPU, RAM, OS) and package versions:[VERIFY: not in the retained reports; add from vqc embeddings.json and the host]
+TABLE VI
+NDCG@10BY REPRESENTATION(SINGLE RUN,SEED31).
+Representation Validation Test
+Original MiniLM (384D) 0.915266 0.905296
+PCA4 + ridge expansion 0.654188 0.702724
+Untrained VQC + ridge expansion 0.534822 0.605030
+Trained VQC + ridge expansion 0.611822 0.609317
+TABLE VII
+QAOASIMULATION VERSUS CLASSICAL OPTIMIZATION(64CASES).
+Metric QAOA Classical
+Exact optimal-price matches 1/64 64/64
+Mean relative optimality gap 17.6013% 0%
+Mean feasible probability 97.5540% 100%
+Mean runtime per case 0.456721 s 0.000505 s
+Mean synthetic revenue 8868.365 10946.111
+and F1, ML-KEM-768 or Lit Protocol latency, purchase-to-
+decryption latency or throughput, graph or QUBO ablations,
+production-search NDCG@10, or quantum hardware execu-
+tion. Their absence is stated.
+Fig. 4. QAOA simulation versus classical optimization on 64 independent
+synthetic pricing cases: mean synthetic revenue, summary statistics, and per-
+case runtime on a log scale (local classical simulation; runtimes are not equal-
+resource benchmarks).
+V. LIMITATIONS ANDDISCUSSION
+The evidence is narrow. The 96-document corpus was
+authored by the researchers with rule-based labels and over-
+
+=== PAGE 7 ===
+lapping query wording; results come from one seed with no
+confidence intervals; 16 test queries give coarse estimates;
+retrieval is in-domain; and the VQC ran as noiseless statevector
+simulation. The negative result applies to this circuit, objective,
+and corpus, not to quantum methods in general. On the system
+side, the backend master key is a centralized trust dependency,
+purchase-to-decryption and Marketplace listing are unverified,
+post-quantum key release is planned, and testnet gas and
+latency do not transfer to mainnet. Blockchain registration
+does not establish legal authorship or copyright.
+VI. CONCLUSION
+DKM is a hybrid prototype that extends an
+AQUASTREAM-style ERC-721 marketplace with LLM
+metadata, MiniLM semantic retrieval, a supplementary asset
+graph, and AES-GCM encrypted off-chain storage under
+backend-held key custody. Across the 18 papers reviewed, we
+found no system combining semantic discovery, automated
+quality assessment, and post-quantum access control for
+knowledge assets. On a controlled corpus of 96 authored
+documents, original MiniLM reached test NDCG@10 of
+0.9053, while the trained four-qubit VQC reached 0.6093,
+below a four-component PCA baseline (0.7027); this negative
+result carries no claim of quantum advantage, and the optional
+QAOA simulation likewise favored classical optimization.
+Future work is to validate the purchase-to-decryption flow,
+implement and benchmark post-quantum key release, and
+run ablations of graph and QUBO reranking against BM25,
+personalized PageRank, and Maximal Marginal Relevance
+with repeated seeds and independent corpora.
+REFERENCES
+[1] C. Cai, Y . Zheng, A. Zhou, and C. Wang, “Building a secure knowledge
+marketplace over crowdsensed data streams,”IEEE Trans. Dependable
+Secure Comput., vol. 18, no. 6, pp. 2601–2616, Nov./Dec. 2021, doi:
+10.1109/TDSC.2019.2958901.
+[2] J. Bernab ´e-Rodr´ıguez, A. Garreta, and O. Lage, “A decentralized private
+data marketplace using blockchain and secure multi-party computation,”
+ACM Trans. Priv. Secur ., vol. 27, no. 2, Art. no. 19, Jun. 2024, doi:
+10.1145/3652162.
+[3] D. Abisha, J. Suba Manoj, A. Ashwanth Raj, P. Aravind Kannan,
+and S. Sunil Kumar, “AQUASTREAM: A decentralized data market-
+place for secure sharing and access,” inProc. 3rd Int. Conf. Intell.
+Cyber Phys. Syst. Internet Things (ICoICI), 2025, pp. 245–250, doi:
+10.1109/ICoICI65217.2025.11252760.
+[4] H. D. Le, V . T. Truong, and L. B. Le, “Blockchain-empowered meta-
+verse: Decentralized crowdsourcing and marketplace for trading machine
+learning data and models,”IEEE Access, vol. 12, pp. 68556–68572,
+2024, doi: 10.1109/ACCESS.2024.3401076.
+[5] Y . Chen, J.-N. Liu, A. Yang, J. Weng, M.-R. Chen, Z. Liu, and M. Li,
+“PACDAM: Privacy-preserving and adaptive cross-chain digital asset
+marketplace,”IEEE Internet Things J., vol. 11, no. 8, pp. 13649–13662,
+2024, doi: 10.1109/JIOT.2023.3337859.
+[6] M. Malik, “CloudChain: Decentralized marketplace for AI com-
+pute resources,” inProc. IEEE Int. Workshop Metrol. Sustain-
+ability (MetroSustainability), 2025, doi: 10.1109/MetroSustainabil-
+ity67617.2025.11548155.
+[7] V . T. Truong, H. D. Le, and L. B. Le, “Trust-free blockchain frame-
+work for AI-generated content trading and management in metaverse,”
+IEEE Access, vol. 12, pp. 41815–41828, 2024, doi: 10.1109/AC-
+CESS.2024.3376509.
+[8] M. Aljohani, R. Mukkamala, and S. Olariu, “A smart contract-based
+decentralized marketplace system to promote reviewer anonymity,” in
+Proc. IEEE Int. Conf. Blockchain Cryptocurrency (ICBC), 2023, doi:
+10.1109/ICBC56567.2023.10175001.
+[9] M. I. Khalid, I. Ehsan, A. K. Al-Ani, J. Iqbal, S. Hussain, S. S. Ullah,
+and Nayab, “A comprehensive survey on blockchain-based decentralized
+storage networks,”IEEE Access, vol. 11, pp. 10995–11015, 2023, doi:
+10.1109/ACCESS.2023.3240237.
+[10] K. Bose, “Efficient and secure threshold encryption schemes
+with universal zero-knowledge proofs: Foundations and implemen-
+tations,” inProc. 4th Int. Conf. Adv. Comput., Commun., Embed-
+ded Secure Syst. (ACCESS), 2025, pp. 333–339, doi: 10.1109/AC-
+CESS65134.2025.11135749.
+[11] N. Liu, J. Duan, X. Liu, and W. Ren, “Zero-knowledge policy-embedded
+access control with a tokenized secret-sharing oracle for privacy-
+preserving consumer EHRs sharing (ZK-PEAC),”IEEE Trans. Consum.
+Electron., 2026, doi: 10.1109/TCE.2026.3713976.
+[12] P. Abla, T. Li, D. He, H. Huang, S. Yu, and Y . Zhang, “Fair and
+privacy-preserved data trading protocol by exploiting blockchain,”IEEE
+Trans. Inf. F orensics Security, vol. 19, pp. 6084–6098, 2024, doi:
+10.1109/TIFS.2024.3398535.
+[13] L. Xue, J. Ni, D. Liu, X. Lin, and X. Shen, “Blockchain-based
+fair and fine-grained data trading with privacy preservation,”IEEE
+Trans. Comput., vol. 72, no. 9, pp. 2440–2453, Sep. 2023, doi:
+10.1109/TC.2023.3251846.
+[14] T. M. Fernandez-Carames and P. Fraga-Lamas, “Towards post-quantum
+blockchain: A review on blockchain cryptography resistant to quantum
+computing attacks,”IEEE Access, vol. 8, pp. 21091–21116, 2020, doi:
+10.1109/ACCESS.2020.2968985.
+[15] Z. Yang, H. Alfauri, B. Farkiani, R. Jain, R. Di Pietro, and A. Erbad,
+“A survey and comparison of post-quantum and quantum blockchains,”
+IEEE Commun. Surv. Tutor ., vol. 26, no. 2, pp. 967–1002, 2nd Quart.
+2024, doi: 10.1109/COMST.2023.3325761.
+[16] N. Saji, S. Kaza, and I. M. Meerasha, “Quantum-resistant blockchain
+framework with LightGBM-based adaptive security for fund transfers,”
+inProc. Int. Conf. Comput., Commun., Control Cyber-Phys. Syst.
+(I5CPS), 2026, doi: 10.1109/I5CPS67958.2026.11452320.
+[17] X. Wang, T. Ban, L. Chen, M. Usman, Y . Guan, D. Lyu, J. Cheng,
+H. Chen, C. Leung, and C. Miao, “Decentralised knowledge graph
+evolution via blockchain,”IEEE Trans. Serv. Comput., vol. 17, no. 1,
+pp. 112–126, Jan./Feb. 2024, doi: 10.1109/TSC.2023.3337873.
+[18] Y . Zhu, H. Yuan, S. Wang, J. Liu, W. Liu, C. Deng, H. Chen,
+Z. Liu, Z. Dou, and J.-R. Wen, “Large language models for informa-
+tion retrieval: A survey,”arXiv preprint arXiv:2308.07107, Aug. 2023.
+[Online]. Available: https://arxiv.org/abs/2308.07107

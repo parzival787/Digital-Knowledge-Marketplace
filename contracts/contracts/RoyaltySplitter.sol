@@ -277,7 +277,7 @@ contract RoyaltySplitter is
         if (length > MAX_RECIPIENTS)
     revert TooManyRecipients();
 
-        uint256 totalShares;
+        uint256 totalShares = 0;
 
         for (uint256 i = 0; i < length;) {
 
@@ -379,7 +379,7 @@ contract RoyaltySplitter is
         uint256 royaltyAmount =
             totalAmount - platformFee;
 
-        uint256 recipientsPaid;
+        uint256 recipientsPaid = 0;
 
         //----------------------------------------------------------
         // Pay Platform
